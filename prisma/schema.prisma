@@ -1,0 +1,423 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  CHATTER_MANAGER
+  CHATTER
+  MODEL
+}
+
+enum CustomStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+}
+
+enum ScriptStatus {
+  DRAFT
+  VALIDATED
+}
+
+enum ContentType {
+  PHOTO
+  VIDEO
+  AUDIO
+  COMBO
+}
+
+enum ShiftSlot {
+  SHIFT_A // 12h-20h
+  SHIFT_B // 20h-04h
+  SHIFT_C // 04h-08h
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      Role
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  modelProfile   ModelProfile?
+  chatterProfile ChatterProfile?
+  auditLogs      AuditLog[]
+}
+
+model ModelProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+
+  // Identity
+  stageName        String
+  dateOfBirth      DateTime?
+  location         String?
+  timezone         String?
+  occupation       String?
+  languages        String[]
+  photoUrl         String?
+
+  // Physical
+  height           String?
+  hairColor        String?
+  eyeColor         String?
+  tattoos          String?
+  piercings        String?
+  style            String?
+  distinctFeatures String?
+
+  // Personality & boundaries
+  personalityTraits  String?
+  acceptedContent    String[]
+  boundaries         String?
+  sexualizationLevel String?
+  personalityNotes   String?
+
+  // Social accounts
+  onlyfansUrl     String?
+  instagramUrl    String?
+  instagramHandle String?
+  tiktokUrl       String?
+  tiktokHandle    String?
+  twitterUrl      String?
+  twitterHandle   String?
+  redditUrl       String?
+  redditHandle    String?
+  threadsUrl      String?
+  threadsHandle   String?
+  otherSocials    Json?
+
+  // Contract
+  contractSignedAt DateTime?
+  contractFileUrl  String?
+  agencyPercentage Float    @default(50)
+  billingFrequency String   @default("bimonthly")
+
+  // Relations
+  customs            CustomContent[]
+  weeklyTemplates    WeeklyContentTemplate[]
+  weeklyTasks        WeeklyContentTask[]
+  scripts            Script[]
+  scriptContentTasks ScriptContentTask[]
+  chatterAssignments ChatterAssignment[]
+  invoices           ModelInvoice[]
+  onboarding         OnboardingPipeline?
+  inflowwData        InflowwDailyData[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ChatterProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+
+  hourlyRate     Float @default(0)
+  commissionRate Float @default(0)
+
+  assignments ChatterAssignment[]
+  shifts      ShiftSchedule[]
+  clockIns    ClockRecord[]
+  customs     CustomContent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ChatterAssignment {
+  id         String         @id @default(cuid())
+  chatterId  String
+  chatter    ChatterProfile @relation(fields: [chatterId], references: [id])
+  modelId    String
+  model      ModelProfile   @relation(fields: [modelId], references: [id])
+  isActive   Boolean        @default(true)
+  assignedAt DateTime       @default(now())
+
+  @@unique([chatterId, modelId])
+}
+
+model CustomContent {
+  id          String         @id @default(cuid())
+  modelId     String
+  model       ModelProfile   @relation(fields: [modelId], references: [id])
+  createdById String
+  createdBy   ChatterProfile @relation(fields: [createdById], references: [id])
+
+  description     String
+  contentType     ContentType[]
+  duration        String?
+  outfit          String?
+  clientCategory  String
+  totalPrice      Float
+  amountCollected Float        @default(0)
+  notes           String?
+  status          CustomStatus @default(NOT_STARTED)
+  driveLink       String?
+
+  messages CustomMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CustomMessage {
+  id        String        @id @default(cuid())
+  customId  String
+  custom    CustomContent @relation(fields: [customId], references: [id])
+  senderId  String
+  content   String
+  createdAt DateTime      @default(now())
+}
+
+model WeeklyContentTemplate {
+  id       String       @id @default(cuid())
+  modelId  String
+  model    ModelProfile @relation(fields: [modelId], references: [id])
+
+  category  String
+  platform  String
+  quantity  Int
+  driveLink String?
+  sortOrder Int     @default(0)
+  isActive  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([modelId, category, platform])
+}
+
+model WeeklyContentTask {
+  id         String       @id @default(cuid())
+  modelId    String
+  model      ModelProfile @relation(fields: [modelId], references: [id])
+  templateId String?
+
+  weekStart         DateTime
+  category          String
+  platform          String
+  targetQuantity    Int
+  completedQuantity Int          @default(0)
+  status            CustomStatus @default(NOT_STARTED)
+  driveLink         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Script {
+  id      String       @id @default(cuid())
+  modelId String
+  model   ModelProfile @relation(fields: [modelId], references: [id])
+
+  name            String
+  scene           String
+  targetAudience  String
+  expectedRevenue String?
+  status          ScriptStatus @default(DRAFT)
+  tags            String[]
+
+  steps        ScriptStep[]
+  contentTasks ScriptContentTask[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ScriptStep {
+  id       String @id @default(cuid())
+  scriptId String
+  script   Script @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+
+  sortOrder    Int
+  type         String
+  content      String
+  price        Float?
+  waitDuration String?
+
+  createdAt DateTime @default(now())
+}
+
+model ScriptContentTask {
+  id       String       @id @default(cuid())
+  scriptId String
+  script   Script       @relation(fields: [scriptId], references: [id])
+  modelId  String
+  model    ModelProfile @relation(fields: [modelId], references: [id])
+
+  description String
+  contentType ContentType
+  duration    String?
+  status      CustomStatus @default(NOT_STARTED)
+  driveLink   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ShiftSchedule {
+  id        String         @id @default(cuid())
+  chatterId String
+  chatter   ChatterProfile @relation(fields: [chatterId], references: [id])
+
+  date    DateTime
+  slot    ShiftSlot
+  modelId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([chatterId, date, slot])
+}
+
+model ClockRecord {
+  id        String         @id @default(cuid())
+  chatterId String
+  chatter   ChatterProfile @relation(fields: [chatterId], references: [id])
+
+  shiftDate   DateTime
+  shiftSlot   ShiftSlot
+  clockIn     DateTime
+  clockOut    DateTime?
+  hoursWorked Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model InflowwDailyData {
+  id      String       @id @default(cuid())
+  modelId String
+  model   ModelProfile @relation(fields: [modelId], references: [id])
+
+  date                   DateTime
+  subsGross              Float    @default(0)
+  tipsGross              Float    @default(0)
+  messagesGross          Float    @default(0)
+  postsGross             Float    @default(0)
+  streamsGross           Float    @default(0)
+  referralsGross         Float    @default(0)
+  totalEarningsGross     Float    @default(0)
+  contributionPct        Float?
+  ofRanking              Int?
+  following              Int?
+  fansWithRenew          Int?
+  renewOnPct             Float?
+  newFans                Int?
+  activeFans             Int?
+  expiredFanChange       Int?
+  postsGrossCount        Float?
+  messagesGrossCount     Float?
+  streamsGrossCount      Float?
+  refundGross            Float?
+  creatorGross           Float?
+  creatorGroupGross      Float?
+  avgSpendPerSpender     Float?
+  avgSpendPerTransaction Float?
+  avgEarningsPerFan      Float?
+  avgSubscriptionLength  String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([modelId, date])
+}
+
+model ModelInvoice {
+  id      String       @id @default(cuid())
+  modelId String
+  model   ModelProfile @relation(fields: [modelId], references: [id])
+
+  periodStart  DateTime
+  periodEnd    DateTime
+  grossRevenue Float
+  ofFees       Float
+  netRevenue   Float
+  agencyShare  Float
+  amountDue    Float
+  status       InvoiceStatus @default(DRAFT)
+  pdfUrl       String?
+
+  subsRevenue      Float @default(0)
+  tipsRevenue      Float @default(0)
+  messagesRevenue  Float @default(0)
+  postsRevenue     Float @default(0)
+  streamsRevenue   Float @default(0)
+  referralsRevenue Float @default(0)
+
+  beneficiaries Json?
+
+  sentAt    DateTime?
+  paidAt    DateTime?
+  overdueAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OnboardingPipeline {
+  id      String       @id @default(cuid())
+  modelId String       @unique
+  model   ModelProfile @relation(fields: [modelId], references: [id])
+
+  steps       Json
+  currentStep Int     @default(0)
+  isCompleted Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SocialPost {
+  id           String    @id @default(cuid())
+  modelId      String
+  platform     String
+  scheduledAt  DateTime
+  description  String?
+  status       String    @default("planned")
+  assignedToId String?
+  postedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  details   Json?
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+}
