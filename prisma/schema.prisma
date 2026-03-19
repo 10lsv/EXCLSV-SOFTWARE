@@ -105,6 +105,9 @@ model ModelProfile {
   threadsHandle   String?
   otherSocials    Json?
 
+  // Onboarding
+  onboardingCompleted Boolean @default(false)
+
   // Contract
   contractSignedAt DateTime?
   contractFileUrl  String?

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { UserMenu } from "@/components/layout/user-menu";
@@ -27,6 +28,17 @@ export default async function DashboardLayout({
   }
 
   const { name, email, role } = session.user;
+
+  // Onboarding redirect for MODEL users
+  if (role === "MODEL") {
+    const profile = await prisma.modelProfile.findUnique({
+      where: { userId: session.user.id },
+      select: { onboardingCompleted: true },
+    });
+    if (profile && !profile.onboardingCompleted) {
+      redirect("/model/onboarding");
+    }
+  }
 
   return (
     <div className="flex h-screen overflow-hidden">
