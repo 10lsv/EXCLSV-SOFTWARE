@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
@@ -19,8 +18,7 @@ const roleLabels: Record<string, string> = {
   MODEL: "Modèle",
 };
 
-export function UserMenu({ name, email, role }: UserMenuProps) {
-  const router = useRouter();
+export function UserMenu({ name, role }: UserMenuProps) {
 
   const initials = name
     .split(" ")

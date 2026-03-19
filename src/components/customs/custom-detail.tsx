@@ -22,7 +22,7 @@ import { ExternalLink, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { CustomStatus } from "@prisma/client";
-import type { CustomDetail as CustomDetailType, CustomMessageItem } from "@/types/custom.types";
+import type { CustomDetail as CustomDetailType } from "@/types/custom.types";
 
 interface CustomDetailProps {
   custom: CustomDetailType;
