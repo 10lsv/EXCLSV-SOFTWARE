@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { ParticleBackground } from "@/components/auth/particle-background";
 
-export default function ResetPasswordPage() {
+function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
 
@@ -198,5 +198,13 @@ export default function ResetPasswordPage() {
         </p>
       </div>
     </>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-[#0A0A0A] text-white/50">Chargement...</div>}>
+      <ResetPasswordForm />
+    </Suspense>
   );
 }
