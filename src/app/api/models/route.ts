@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
   const parsed = createModelSchema.safeParse(body);
 
   if (!parsed.success) {
-    return jsonError(parsed.error.errors[0].message);
+    return jsonError(parsed.error.issues[0].message);
   }
 
   const { email, name, password, ...profileData } = parsed.data;

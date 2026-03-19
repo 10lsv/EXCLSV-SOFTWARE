@@ -55,7 +55,7 @@ export async function PATCH(
   const parsed = updateModelSchema.safeParse(body);
 
   if (!parsed.success) {
-    return jsonError(parsed.error.errors[0].message);
+    return jsonError(parsed.error.issues[0].message);
   }
 
   const existing = await prisma.modelProfile.findUnique({
