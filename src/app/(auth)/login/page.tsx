@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
+import { ParticleBackground } from "@/components/auth/particle-background";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -34,79 +36,30 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col lg:flex-row">
-      {/* ── Left column: branding ── */}
-      <div className="relative hidden flex-1 flex-col items-center justify-center overflow-hidden lg:flex">
-        {/* Grid background */}
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            backgroundImage:
-              "linear-gradient(rgba(233,30,140,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(233,30,140,0.06) 1px, transparent 1px)",
-            backgroundSize: "60px 60px",
-          }}
-        />
+    <>
+      <ParticleBackground />
 
-        {/* Radial glow behind logo */}
-        <div
-          className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-          style={{
-            width: 500,
-            height: 500,
-            background:
-              "radial-gradient(circle, rgba(233,30,140,0.15) 0%, transparent 70%)",
-          }}
-        />
-
-        {/* Logo + tagline */}
-        <div className="relative z-10 flex flex-col items-center gap-8 px-8">
-          <Image
-            src="/logo-agence-sans-fond.png"
-            alt="EXCLSV"
-            width={220}
-            height={220}
-            className="drop-shadow-[0_0_40px_rgba(233,30,140,0.35)]"
-            priority
-          />
-          <div className="text-center">
-            <h1 className="text-4xl font-extrabold tracking-tight text-white xl:text-5xl">
-              EXCLSV
-            </h1>
-            <p className="mt-3 text-lg font-medium text-white/60">
-              Gerez votre agence. Dominez le game.
-            </p>
-          </div>
-        </div>
-
-        {/* Bottom decorative line */}
-        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#E91E8C]/40 to-transparent" />
-      </div>
-
-      {/* ── Right column: form ── */}
-      <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 lg:max-w-[560px]">
+      <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-6 py-12">
         {/* Mobile logo */}
         <div className="mb-10 flex flex-col items-center gap-4 lg:hidden">
           <Image
             src="/logo-agence-sans-fond.png"
             alt="EXCLSV"
-            width={100}
-            height={100}
-            className="drop-shadow-[0_0_30px_rgba(233,30,140,0.35)]"
+            width={120}
+            height={120}
+            className="drop-shadow-[0_0_35px_rgba(233,30,140,0.35)]"
             priority
           />
-          <h1 className="text-2xl font-extrabold tracking-tight text-white">
-            EXCLSV
-          </h1>
         </div>
 
         {/* Card */}
-        <div className="w-full max-w-[420px] rounded-2xl border border-[#222] bg-[#111] p-8 shadow-2xl shadow-black/60 sm:p-10">
+        <div className="w-full max-w-[420px] rounded-2xl border border-[#222] bg-[#111111]/95 p-8 shadow-2xl shadow-black/60 backdrop-blur-sm sm:p-10">
           <div className="mb-8 text-center">
             <h2 className="text-2xl font-bold text-white sm:text-3xl">
               Connexion
             </h2>
             <p className="mt-2 text-sm text-white/50">
-              Accedez a votre espace EXCLSV
+              Accédez à votre espace EXCLSV
             </p>
           </div>
 
@@ -196,20 +149,20 @@ export default function LoginPage() {
 
           {/* Forgot password */}
           <p className="mt-6 text-center">
-            <a
-              href="#"
+            <Link
+              href="/forgot-password"
               className="text-sm text-white/40 transition-colors duration-200 hover:text-[#E91E8C]"
             >
-              Mot de passe oublie ?
-            </a>
+              Mot de passe oublié ?
+            </Link>
           </p>
         </div>
 
         {/* Footer */}
         <p className="mt-8 text-xs text-white/20">
-          &copy; {new Date().getFullYear()} EXCLSV — Tous droits reserves
+          &copy; {new Date().getFullYear()} EXCLSV — Tous droits réservés
         </p>
       </div>
-    </div>
+    </>
   );
 }

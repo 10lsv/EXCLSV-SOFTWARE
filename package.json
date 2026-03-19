@@ -44,6 +44,7 @@
     "react-dom": "^18",
     "react-hook-form": "^7.71.2",
     "redis": "^5.11.0",
+    "resend": "^6.9.4",
     "shadcn": "^4.0.8",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",

@@ -36,8 +36,12 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
-  // Login page — redirect to dashboard if already logged in
-  if (pathname.startsWith("/login")) {
+  // Auth pages — redirect to dashboard if already logged in, otherwise allow
+  if (
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/forgot-password") ||
+    pathname.startsWith("/reset-password")
+  ) {
     if (session?.user) {
       const dashboardUrl = new URL(
         getDashboardPath(session.user.role),
