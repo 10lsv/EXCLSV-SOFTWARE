@@ -63,6 +63,45 @@ async function main() {
 
   console.log(`Chatter created: ${chatter.email} (${chatter.id})`);
 
+  // Leo — OWNER
+  const leoPassword = await bcrypt.hash("Sauveyleo3.", 12);
+  const leo = await prisma.user.upsert({
+    where: { email: "leo3elexo3@gmail.com" },
+    update: {},
+    create: {
+      email: "leo3elexo3@gmail.com",
+      name: "Leo",
+      password: leoPassword,
+      role: Role.OWNER,
+    },
+  });
+  console.log(`Owner created: ${leo.email} (${leo.id})`);
+
+  // Lelio — MODEL
+  const lelioPassword = await bcrypt.hash("model123", 12);
+  const lelio = await prisma.user.upsert({
+    where: { email: "lelio.model@exclsv.com" },
+    update: {},
+    create: {
+      email: "lelio.model@exclsv.com",
+      name: "Lelio",
+      password: lelioPassword,
+      role: Role.MODEL,
+    },
+  });
+  const lelioProfile = await prisma.modelProfile.findUnique({
+    where: { userId: lelio.id },
+  });
+  if (!lelioProfile) {
+    await prisma.modelProfile.create({
+      data: {
+        userId: lelio.id,
+        stageName: "Lelio",
+      },
+    });
+  }
+  console.log(`Model created: ${lelio.email} (${lelio.id})`);
+
   // Notifications de test pour l'admin
   const adminNotifCount = await prisma.notification.count({
     where: { userId: owner.id },
