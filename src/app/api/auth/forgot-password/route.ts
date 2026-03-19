@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { resend } from "@/lib/resend";
+import { Resend } from "resend";
 import crypto from "crypto";
 
 export async function POST(req: NextRequest) {
@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
   const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
   const resetUrl = `${baseUrl}/reset-password?token=${token}`;
 
+  const resend = new Resend(process.env.RESEND_API_KEY);
   await resend.emails.send({
     from: "EXCLSV Agency <onboarding@resend.dev>",
     to: email,
