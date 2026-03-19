@@ -4,46 +4,36 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  const hashedPassword = await bcrypt.hash("admin123", 12);
-
+  // ── Admin EXCLSV — OWNER ──
+  const adminPassword = await bcrypt.hash("admin123", 12);
   const owner = await prisma.user.upsert({
     where: { email: "admin@exclsv.com" },
-    update: {},
+    update: { password: adminPassword },
     create: {
       email: "admin@exclsv.com",
       name: "Admin EXCLSV",
-      password: hashedPassword,
+      password: adminPassword,
       role: Role.OWNER,
     },
   });
+  console.log(`Owner: ${owner.email} (${owner.id})`);
 
-  console.log(`Owner created: ${owner.email} (${owner.id})`);
-
-  // Chatter
+  // ── Alex Chatter — CHATTER ──
   const chatterPassword = await bcrypt.hash("chatter123", 12);
   const chatter = await prisma.user.upsert({
     where: { email: "chatter@exclsv.com" },
-    update: {},
+    update: { password: chatterPassword },
     create: {
       email: "chatter@exclsv.com",
       name: "Alex Chatter",
       password: chatterPassword,
       role: Role.CHATTER,
-      chatterProfile: {
-        create: {
-          hourlyRate: 15,
-          commissionRate: 5,
-          driveLink: "https://drive.google.com/drive/folders/1Si3aITP4OCylufkwqkH8kCtTZEZKzTjr?usp=sharing",
-        },
-      },
     },
   });
-
-  // Ensure chatter profile exists (in case user already existed)
-  const existingProfile = await prisma.chatterProfile.findUnique({
+  const existingChatterProfile = await prisma.chatterProfile.findUnique({
     where: { userId: chatter.id },
   });
-  if (!existingProfile) {
+  if (!existingChatterProfile) {
     await prisma.chatterProfile.create({
       data: {
         userId: chatter.id,
@@ -52,22 +42,14 @@ async function main() {
         driveLink: "https://drive.google.com/drive/folders/1Si3aITP4OCylufkwqkH8kCtTZEZKzTjr?usp=sharing",
       },
     });
-  } else if (!existingProfile.driveLink) {
-    await prisma.chatterProfile.update({
-      where: { id: existingProfile.id },
-      data: {
-        driveLink: "https://drive.google.com/drive/folders/1Si3aITP4OCylufkwqkH8kCtTZEZKzTjr?usp=sharing",
-      },
-    });
   }
+  console.log(`Chatter: ${chatter.email} (${chatter.id})`);
 
-  console.log(`Chatter created: ${chatter.email} (${chatter.id})`);
-
-  // Leo — OWNER
+  // ── Leo — OWNER ──
   const leoPassword = await bcrypt.hash("Sauveyleo3.", 12);
   const leo = await prisma.user.upsert({
     where: { email: "leo3elexo3@gmail.com" },
-    update: {},
+    update: { password: leoPassword },
     create: {
       email: "leo3elexo3@gmail.com",
       name: "Leo",
@@ -75,13 +57,13 @@ async function main() {
       role: Role.OWNER,
     },
   });
-  console.log(`Owner created: ${leo.email} (${leo.id})`);
+  console.log(`Owner: ${leo.email} (${leo.id})`);
 
-  // Lelio — MODEL
+  // ── Lelio — MODEL ──
   const lelioPassword = await bcrypt.hash("model123", 12);
   const lelio = await prisma.user.upsert({
     where: { email: "lelio.model@exclsv.com" },
-    update: {},
+    update: { password: lelioPassword },
     create: {
       email: "lelio.model@exclsv.com",
       name: "Lelio",
@@ -94,13 +76,32 @@ async function main() {
   });
   if (!lelioProfile) {
     await prisma.modelProfile.create({
-      data: {
-        userId: lelio.id,
-        stageName: "Lelio",
-      },
+      data: { userId: lelio.id, stageName: "Lelio" },
     });
   }
-  console.log(`Model created: ${lelio.email} (${lelio.id})`);
+  console.log(`Model: ${lelio.email} (${lelio.id})`);
+
+  // ── Luna — MODEL (test) ──
+  const lunaPassword = await bcrypt.hash("luna123", 12);
+  const luna = await prisma.user.upsert({
+    where: { email: "luna@exclsv.com" },
+    update: { password: lunaPassword },
+    create: {
+      email: "luna@exclsv.com",
+      name: "Luna",
+      password: lunaPassword,
+      role: Role.MODEL,
+    },
+  });
+  const lunaProfile = await prisma.modelProfile.findUnique({
+    where: { userId: luna.id },
+  });
+  if (!lunaProfile) {
+    await prisma.modelProfile.create({
+      data: { userId: luna.id, stageName: "Luna" },
+    });
+  }
+  console.log(`Model: ${luna.email} (${luna.id})`);
 
   // Notifications de test pour l'admin
   const adminNotifCount = await prisma.notification.count({
