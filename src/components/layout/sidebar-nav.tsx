@@ -17,6 +17,7 @@ import {
   MessageSquare,
   Clock,
   Receipt,
+  Bell,
   type LucideIcon,
 } from "lucide-react";
 
@@ -38,6 +39,7 @@ const navByRole: Record<Role, NavItem[]> = {
     { label: "Réseaux sociaux", href: "/admin/social", icon: Share2 },
     { label: "Onboarding", href: "/admin/onboarding", icon: ClipboardList },
     { label: "Paramètres", href: "/admin/settings", icon: Settings },
+    { label: "Notifications", href: "/admin/notifications", icon: Bell },
   ],
   ADMIN: [
     { label: "Tableau de bord", href: "/admin/dashboard", icon: LayoutDashboard },
@@ -49,22 +51,26 @@ const navByRole: Record<Role, NavItem[]> = {
     { label: "Contenu", href: "/admin/content", icon: Film },
     { label: "Réseaux sociaux", href: "/admin/social", icon: Share2 },
     { label: "Onboarding", href: "/admin/onboarding", icon: ClipboardList },
+    { label: "Notifications", href: "/admin/notifications", icon: Bell },
   ],
   CHATTER_MANAGER: [
     { label: "Tableau de bord", href: "/chatter-manager/dashboard", icon: LayoutDashboard },
     { label: "Customs", href: "/chatter-manager/customs", icon: FileText },
     { label: "Planning", href: "/chatter-manager/planning", icon: Calendar },
+    { label: "Notifications", href: "/chatter-manager/notifications", icon: Bell },
   ],
   CHATTER: [
     { label: "Tableau de bord", href: "/chatter/dashboard", icon: LayoutDashboard },
     { label: "Customs", href: "/chatter/customs", icon: MessageSquare },
     { label: "Planning", href: "/chatter/planning", icon: Clock },
+    { label: "Notifications", href: "/chatter/notifications", icon: Bell },
   ],
   MODEL: [
     { label: "Tableau de bord", href: "/model/dashboard", icon: LayoutDashboard },
     { label: "Customs", href: "/model/customs", icon: FileText },
     { label: "Contenu", href: "/model/content", icon: Film },
     { label: "Factures", href: "/model/invoices", icon: Receipt },
+    { label: "Notifications", href: "/model/notifications", icon: Bell },
   ],
 };
 

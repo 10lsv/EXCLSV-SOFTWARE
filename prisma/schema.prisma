@@ -131,8 +131,9 @@ model ChatterProfile {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id])
 
-  hourlyRate     Float @default(0)
-  commissionRate Float @default(0)
+  hourlyRate     Float   @default(0)
+  commissionRate Float   @default(0)
+  driveLink      String?
 
   assignments ChatterAssignment[]
   shifts      ShiftSchedule[]
@@ -167,6 +168,7 @@ model CustomContent {
   duration        String?
   outfit          String?
   clientCategory  String
+  clientHandle    String?
   totalPrice      Float
   amountCollected Float        @default(0)
   notes           String?

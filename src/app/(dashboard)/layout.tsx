@@ -4,7 +4,16 @@ import { Role } from "@prisma/client";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { UserMenu } from "@/components/layout/user-menu";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { Separator } from "@/components/ui/separator";
+
+const notifPathByRole: Record<string, string> = {
+  OWNER: "/admin/notifications",
+  ADMIN: "/admin/notifications",
+  CHATTER_MANAGER: "/chatter-manager/notifications",
+  CHATTER: "/chatter/notifications",
+  MODEL: "/model/notifications",
+};
 
 export default async function DashboardLayout({
   children,
@@ -41,9 +50,11 @@ export default async function DashboardLayout({
         {/* Topbar */}
         <header className="flex h-14 items-center justify-between border-b bg-card px-4 md:px-6">
           <MobileSidebar role={role as Role} />
-          <div className="hidden md:block" />
-          <div className="md:hidden">
-            <UserMenu name={name || ""} email={email || ""} role={role} />
+          <div className="flex items-center gap-2">
+            <NotificationBell notificationsPath={notifPathByRole[role] || "/admin/notifications"} />
+            <div className="md:hidden">
+              <UserMenu name={name || ""} email={email || ""} role={role} />
+            </div>
           </div>
         </header>
 
