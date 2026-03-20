@@ -63,6 +63,7 @@ export function usePushNotifications() {
 
     try {
       const permission = await Notification.requestPermission();
+      console.log("[Push] Permission:", permission);
       if (permission !== "granted") {
         setShowBanner(false);
         localStorage.setItem(DISMISS_KEY, new Date().toISOString());
@@ -73,10 +74,13 @@ export function usePushNotifications() {
       // Register service worker
       const registration = await navigator.serviceWorker.register("/sw.js");
       await navigator.serviceWorker.ready;
+      console.log("[Push] Service worker registered");
 
       // Subscribe to push
       const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+      console.log("[Push] VAPID key:", vapidKey ? "présente" : "MANQUANTE");
       if (!vapidKey) {
+        console.error("[Push] NEXT_PUBLIC_VAPID_PUBLIC_KEY is missing — push disabled");
         setLoading(false);
         return;
       }
@@ -85,11 +89,12 @@ export function usePushNotifications() {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
       });
+      console.log("[Push] Subscription created:", subscription.endpoint.substring(0, 50));
 
       const subJson = subscription.toJSON();
 
       // Send to server
-      await fetch("/api/push/subscribe", {
+      const res = await fetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -100,11 +105,19 @@ export function usePushNotifications() {
           },
         }),
       });
+      console.log("[Push] Subscribe response:", res.status);
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        console.error("[Push] Subscribe failed:", body);
+        setLoading(false);
+        return;
+      }
 
       setSubscribed(true);
       setShowBanner(false);
     } catch (err) {
-      console.error("[PushNotif] subscribe error:", err);
+      console.error("[Push] subscribe error:", err);
     }
     setLoading(false);
   }, [supported]);

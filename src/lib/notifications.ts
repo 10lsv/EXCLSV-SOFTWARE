@@ -30,10 +30,12 @@ async function sendPush(userId: string, payload: { title: string; message: strin
         JSON.stringify(payload)
       );
     } catch (err: unknown) {
-      // Remove expired/invalid subscriptions
       const statusCode = (err as { statusCode?: number })?.statusCode;
       if (statusCode === 410 || statusCode === 404) {
+        console.log("[Push] Removing expired subscription:", sub.id);
         await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
+      } else {
+        console.error("[Push] sendNotification error:", statusCode, err);
       }
     }
   }
