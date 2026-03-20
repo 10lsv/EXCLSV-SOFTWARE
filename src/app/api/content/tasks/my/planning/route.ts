@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
   const sunday = new Date(monday);
   sunday.setUTCDate(monday.getUTCDate() + 6);
 
-  const tasks = await prisma.weeklyContentTask.findMany({
+  let tasks = await prisma.weeklyContentTask.findMany({
     where: { modelId: modelProfile.id, weekStart: monday },
     include: {
       planEntries: {
@@ -41,6 +41,44 @@ export async function GET(req: NextRequest) {
     },
     orderBy: [{ platform: "asc" }, { category: "asc" }],
   });
+
+  // Auto-génération si aucune tâche pour cette semaine
+  if (tasks.length === 0) {
+    const templates = await prisma.weeklyContentTemplate.findMany({
+      where: { modelId: modelProfile.id, isActive: true },
+      orderBy: [{ platform: "asc" }, { sortOrder: "asc" }],
+    });
+
+    if (templates.length > 0) {
+      await prisma.weeklyContentTask.createMany({
+        data: templates.map((t) => ({
+          modelId: modelProfile.id,
+          templateId: t.id,
+          weekStart: monday,
+          category: t.category,
+          platform: t.platform,
+          targetQuantity: t.quantity,
+          completedQuantity: 0,
+          status: "NOT_STARTED" as const,
+          driveLink: t.driveLink,
+        })),
+      });
+
+      // Re-fetch avec planEntries
+      tasks = await prisma.weeklyContentTask.findMany({
+        where: { modelId: modelProfile.id, weekStart: monday },
+        include: {
+          planEntries: {
+            where: {
+              plannedDate: { gte: monday, lte: sunday },
+            },
+            orderBy: { plannedDate: "asc" },
+          },
+        },
+        orderBy: [{ platform: "asc" }, { category: "asc" }],
+      });
+    }
+  }
 
   return jsonSuccess({
     tasks,

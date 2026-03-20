@@ -32,6 +32,8 @@ import {
   Check,
   X,
   ExternalLink,
+  AlertTriangle,
+  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, addDays } from "date-fns";
@@ -92,6 +94,7 @@ export default function AdminContentPage() {
   const [newQuantity, setNewQuantity] = useState("");
   const [newDriveLink, setNewDriveLink] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [adjusting, setAdjusting] = useState(false);
 
   const fetchModels = useCallback(async () => {
     const res = await fetch("/api/models?limit=100");
@@ -185,6 +188,19 @@ export default function AdminContentPage() {
     fetchTasks();
   }
 
+  async function handleAdjustWeek() {
+    if (!confirm("Regénérer les tâches de cette semaine depuis le template actuel ? Les tâches existantes seront remplacées.")) return;
+    setAdjusting(true);
+    const ws = weekStart.toISOString().split("T")[0];
+    await fetch("/api/content/tasks/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ modelId: selectedModel, weekStart: ws }),
+    });
+    setAdjusting(false);
+    fetchTasks();
+  }
+
   // Grouper par plateforme
   function groupByPlatform<T extends { platform: string }>(
     items: T[]
@@ -261,6 +277,14 @@ export default function AdminContentPage() {
               </Button>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* Avertissement modification template */}
+              <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800 dark:text-amber-300">
+                  Les modifications du template s&apos;appliqueront à partir de la semaine prochaine. Pour modifier la semaine en cours, utilisez &quot;Ajuster cette semaine&quot; ci-dessous.
+                </p>
+              </div>
+
               {Object.keys(templateGroups).length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
                   Aucun template. Ajoutez des catégories de contenu.
@@ -407,16 +431,16 @@ export default function AdminContentPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={handleGenerate}
-                  disabled={generating}
+                  onClick={handleAdjustWeek}
+                  disabled={adjusting}
                 >
-                  <RefreshCw
+                  <Wrench
                     className={cn(
                       "mr-1 h-3.5 w-3.5",
-                      generating && "animate-spin"
+                      adjusting && "animate-spin"
                     )}
                   />
-                  Regénérer
+                  Ajuster cette semaine
                 </Button>
               </div>
             </CardHeader>

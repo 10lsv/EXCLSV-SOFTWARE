@@ -36,6 +36,11 @@ export default auth((req) => {
     return NextResponse.next();
   }
 
+  // Cron API routes — auth handled by CRON_SECRET header, not session
+  if (pathname.startsWith("/api/cron")) {
+    return NextResponse.next();
+  }
+
   // Auth pages — redirect to dashboard if already logged in, otherwise allow
   if (
     pathname.startsWith("/login") ||
