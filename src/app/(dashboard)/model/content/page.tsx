@@ -15,8 +15,8 @@ import {
   Calendar,
   X,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { format, addDays, startOfWeek, isToday, isSameDay } from "date-fns";
+import { cn, getMondayUTC } from "@/lib/utils";
+import { format, addDays, isToday, isSameDay } from "date-fns";
 import { fr } from "date-fns/locale";
 
 interface PlanEntry {
@@ -81,12 +81,8 @@ export default function ModelContentPage() {
     try {
       const params = new URLSearchParams();
       if (weekOffset !== 0) {
-        const now = new Date();
-        const day = now.getDay();
-        const mondayOff = day === 0 ? -6 : 1 - day;
-        const monday = new Date(now);
-        monday.setDate(now.getDate() + mondayOff + weekOffset * 7);
-        monday.setHours(0, 0, 0, 0);
+        const monday = getMondayUTC();
+        monday.setUTCDate(monday.getUTCDate() + weekOffset * 7);
         params.set("weekStart", monday.toISOString());
       }
       const res = await fetch(`/api/content/tasks/my/planning?${params}`);

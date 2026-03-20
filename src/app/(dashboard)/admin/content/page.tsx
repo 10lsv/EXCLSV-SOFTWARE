@@ -70,11 +70,10 @@ const platformColors: Record<string, string> = {
 };
 
 function getMonday(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay();
   const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() + diff);
   return d;
 }
 

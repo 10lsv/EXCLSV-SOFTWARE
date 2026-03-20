@@ -15,8 +15,8 @@ export async function GET(req: NextRequest) {
     return jsonError("modelId et weekStart requis");
   }
 
-  const weekStart = new Date(weekStartStr);
-  weekStart.setHours(0, 0, 0, 0);
+  const parsed = new Date(weekStartStr);
+  const weekStart = new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate()));
 
   const tasks = await prisma.weeklyContentTask.findMany({
     where: { modelId, weekStart },
