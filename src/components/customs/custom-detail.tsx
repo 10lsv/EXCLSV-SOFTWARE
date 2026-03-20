@@ -328,6 +328,7 @@ export function CustomDetailView({
 
         {/* Mini Chat */}
         <CustomMiniChat
+          customId={custom.id}
           messages={custom.messages}
           currentUserId={currentUserId}
           onSendMessage={onSendMessage}

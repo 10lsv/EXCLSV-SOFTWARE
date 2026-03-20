@@ -5,6 +5,62 @@ import { jsonSuccess, jsonError, requireRole, logAudit } from "@/lib/api-utils";
 import { createMessageSchema } from "@/lib/validations/custom";
 import { createNotification, notifyAdmins, truncate } from "@/lib/notifications";
 
+// GET /api/customs/[id]/messages — list messages for polling
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const { error, session } = await requireRole(
+    Role.OWNER, Role.ADMIN, Role.CHATTER, Role.MODEL
+  );
+  if (error) return error;
+
+  const role = session!.user.role as Role;
+  const userId = session!.user.id;
+
+  const custom = await prisma.customContent.findUnique({
+    where: { id: params.id },
+    select: { modelId: true, model: { select: { userId: true } } },
+  });
+
+  if (!custom) return jsonError("Custom introuvable", 404);
+
+  // Data isolation
+  if (role === Role.MODEL && custom.model.userId !== userId) {
+    return jsonError("Accès interdit", 403);
+  }
+  if (role === Role.CHATTER) {
+    const cp = await prisma.chatterProfile.findUnique({ where: { userId }, select: { id: true } });
+    if (!cp) return jsonError("Profil chatter introuvable", 404);
+    const assignment = await prisma.chatterAssignment.findFirst({
+      where: { chatterId: cp.id, modelId: custom.modelId, isActive: true },
+    });
+    if (!assignment) return jsonError("Accès interdit", 403);
+  }
+
+  const messages = await prisma.customMessage.findMany({
+    where: { customId: params.id },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const senderIds = Array.from(new Set(messages.map((m) => m.senderId)));
+  const senders = await prisma.user.findMany({
+    where: { id: { in: senderIds } },
+    select: { id: true, name: true, role: true },
+  });
+  const senderMap = new Map(senders.map((s) => [s.id, s]));
+
+  return jsonSuccess(
+    messages.map((m) => ({
+      id: m.id,
+      senderId: m.senderId,
+      content: m.content,
+      createdAt: m.createdAt,
+      sender: senderMap.get(m.senderId) || { name: "Inconnu", role: "UNKNOWN" },
+    }))
+  );
+}
+
 // POST /api/customs/[id]/messages — add message to custom thread
 export async function POST(
   req: NextRequest,

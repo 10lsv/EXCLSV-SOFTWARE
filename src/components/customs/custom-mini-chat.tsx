@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Send, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 import type { CustomMessageItem } from "@/types/custom.types";
 
 interface CustomMiniChatProps {
+  customId: string;
   messages: CustomMessageItem[];
   currentUserId: string;
   onSendMessage: (content: string) => Promise<void>;
@@ -16,20 +18,66 @@ interface CustomMiniChatProps {
 }
 
 export function CustomMiniChat({
-  messages,
+  customId,
+  messages: initialMessages,
   currentUserId,
   onSendMessage,
   canSendMessage,
 }: CustomMiniChatProps) {
+  const [messages, setMessages] = useState<CustomMessageItem[]>(initialMessages);
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const [newIds, setNewIds] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
+  const prevCountRef = useRef(initialMessages.length);
 
+  // Sync initial messages when prop changes (e.g. navigation)
+  useEffect(() => {
+    setMessages(initialMessages);
+    prevCountRef.current = initialMessages.length;
+  }, [initialMessages]);
+
+  // Auto-scroll when messages change
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages.length]);
+
+  // Poll messages every 5s
+  const fetchMessages = useCallback(async () => {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    try {
+      const res = await fetch(`/api/customs/${customId}/messages`);
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.success) {
+        const fetched = json.data as CustomMessageItem[];
+        setMessages((prev) => {
+          if (fetched.length === prev.length) return prev;
+          // Detect new messages from others (for fade-in animation)
+          if (fetched.length > prev.length) {
+            const prevIds = new Set(prev.map((m) => m.id));
+            const incoming = fetched
+              .filter((m) => !prevIds.has(m.id) && m.senderId !== currentUserId)
+              .map((m) => m.id);
+            if (incoming.length > 0) {
+              setNewIds(new Set(incoming));
+              setTimeout(() => setNewIds(new Set()), 1500);
+            }
+          }
+          return fetched;
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }, [customId, currentUserId]);
+
+  useEffect(() => {
+    const interval = setInterval(fetchMessages, 5000);
+    return () => clearInterval(interval);
+  }, [fetchMessages]);
 
   async function handleSend() {
     if (!newMessage.trim() || sending) return;
@@ -37,6 +85,8 @@ export function CustomMiniChat({
     await onSendMessage(newMessage.trim());
     setNewMessage("");
     setSending(false);
+    // Fetch immediately after send for instant feedback
+    await fetchMessages();
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -64,17 +114,24 @@ export function CustomMiniChat({
         ) : (
           messages.map((msg) => {
             const isOwn = msg.senderId === currentUserId;
+            const isNew = newIds.has(msg.id);
             return (
               <div
                 key={msg.id}
-                className={`flex flex-col ${isOwn ? "items-end" : "items-start"}`}
+                className={cn(
+                  "flex flex-col transition-all duration-500",
+                  isOwn ? "items-end" : "items-start",
+                  isNew && "animate-in fade-in slide-in-from-bottom-2"
+                )}
               >
                 <div
-                  className={`max-w-[80%] rounded-lg px-3 py-2 ${
+                  className={cn(
+                    "max-w-[80%] rounded-lg px-3 py-2",
                     isOwn
                       ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
-                  }`}
+                      : "bg-muted",
+                    isNew && !isOwn && "ring-2 ring-primary/30"
+                  )}
                 >
                   {!isOwn && msg.sender && (
                     <p className="mb-1 text-xs font-semibold">
