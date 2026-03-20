@@ -37,10 +37,12 @@ export async function PATCH(
   const newCompleted = Math.max(0, Math.min(task.targetQuantity, task.completedQuantity + delta));
 
   // Statut automatique
-  let status: string;
-  if (newCompleted === 0) status = "NOT_STARTED";
-  else if (newCompleted >= task.targetQuantity) status = "COMPLETED";
-  else status = "IN_PROGRESS";
+  const status =
+    newCompleted === 0
+      ? ("NOT_STARTED" as const)
+      : newCompleted >= task.targetQuantity
+        ? ("COMPLETED" as const)
+        : ("IN_PROGRESS" as const);
 
   const updated = await prisma.weeklyContentTask.update({
     where: { id: params.id },

@@ -173,7 +173,7 @@ export default function ModelProfilePage() {
     const fields = sectionFields[section];
     const initial: Record<string, string> = {};
     for (const f of fields) {
-      const val = (profile as Record<string, unknown>)[f.key];
+      const val = (profile as unknown as Record<string, unknown>)[f.key];
       if (Array.isArray(val)) {
         initial[f.key] = val.join(", ");
       } else if (val === null || val === undefined) {

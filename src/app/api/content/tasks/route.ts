@@ -5,7 +5,7 @@ import { jsonSuccess, jsonError, requireRole } from "@/lib/api-utils";
 
 // GET /api/content/tasks?modelId=xxx&weekStart=2026-03-16
 export async function GET(req: NextRequest) {
-  const { error, session } = await requireRole(Role.OWNER, Role.ADMIN);
+  const { error } = await requireRole(Role.OWNER, Role.ADMIN);
   if (error) return error;
 
   const modelId = req.nextUrl.searchParams.get("modelId");

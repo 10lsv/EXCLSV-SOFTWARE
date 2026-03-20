@@ -354,7 +354,6 @@ export function NotificationCenter() {
             )}
           {readNotifs.map((notif) => {
             const Icon = getNotifIcon(notif.type);
-            const colors = getNotifColor(notif.type);
             return (
               <Card
                 key={notif.id}

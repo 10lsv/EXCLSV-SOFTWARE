@@ -93,7 +93,7 @@ export default function AdminContentPage() {
   const [newPlatform, setNewPlatform] = useState("OnlyFans");
   const [newQuantity, setNewQuantity] = useState("");
   const [newDriveLink, setNewDriveLink] = useState("");
-  const [generating, setGenerating] = useState(false);
+  const [_generating, setGenerating] = useState(false);
   const [adjusting, setAdjusting] = useState(false);
 
   const fetchModels = useCallback(async () => {

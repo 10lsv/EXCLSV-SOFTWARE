@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { CustomDetailView } from "@/components/customs/custom-detail";
 import { ArrowLeft, Loader2 } from "lucide-react";
-import { CustomStatus } from "@prisma/client";
 import type { CustomDetail } from "@/types/custom.types";
 
 export default function ChatterManagerCustomDetailPage() {

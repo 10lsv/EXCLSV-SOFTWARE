@@ -102,9 +102,10 @@ export function usePushNotifications() {
 
       // Step 4: Subscribe to push
       console.log("[Push] Subscribing to push...");
+      // Push notifications only work in production (HTTPS required)
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_KEY),
+        applicationServerKey: urlBase64ToUint8Array(VAPID_KEY) as BufferSource,
       });
       console.log("[Push] Push subscription created:", subscription.endpoint.substring(0, 60));
 

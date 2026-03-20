@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
-import { jsonSuccess, jsonError, requireRole } from "@/lib/api-utils";
+import { jsonSuccess, requireRole } from "@/lib/api-utils";
 
 // GET /api/notifications — list notifications for current user
 // ?source=popover → 5 dernières non-dismissées du volet

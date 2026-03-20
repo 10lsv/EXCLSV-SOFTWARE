@@ -1,10 +1,11 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
-import { jsonSuccess, jsonError, requireRole } from "@/lib/api-utils";
+import { jsonSuccess, requireRole } from "@/lib/api-utils";
 
 // DELETE /api/notifications/delete-all — delete all notifications for current user
-export async function DELETE(req: NextRequest) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function DELETE(_req: NextRequest) {
   const { error, session } = await requireRole(
     Role.OWNER,
     Role.ADMIN,

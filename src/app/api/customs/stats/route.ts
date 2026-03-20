@@ -1,11 +1,11 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
-import { jsonSuccess, jsonError, requireRole } from "@/lib/api-utils";
+import { jsonSuccess, requireRole } from "@/lib/api-utils";
 
 // GET /api/customs/stats — KPI analytics for admin customs page
-export async function GET(req: NextRequest) {
-  const { error, session } = await requireRole(Role.OWNER, Role.ADMIN);
+export async function GET(_req: NextRequest) {
+  const { error } = await requireRole(Role.OWNER, Role.ADMIN);
   if (error) return error;
 
   // Début de la semaine (lundi)
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
 
   const [
     customsThisWeek,
-    customsThisMonth,
+    , // customsThisMonth (unused, identical to totalThisMonth)
     completedThisMonth,
     totalThisMonth,
     revenueThisMonth,

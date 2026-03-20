@@ -61,8 +61,9 @@ export function ModelForm({
     setValue,
     watch,
     formState: { errors },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } = useForm<CreateModelInput>({
-    resolver: zodResolver(createModelSchema),
+    resolver: zodResolver(createModelSchema) as any,
     defaultValues: {
       languages: [],
       acceptedContent: [],
@@ -96,7 +97,8 @@ export function ModelForm({
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    <form onSubmit={handleSubmit(onSubmit as any)} className="space-y-6">
       <Tabs defaultValue="identity" className="w-full">
         <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6">
           <TabsTrigger value="identity">Identité</TabsTrigger>

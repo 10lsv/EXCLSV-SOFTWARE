@@ -9,7 +9,7 @@ export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const { error, session } = await requireRole(Role.OWNER, Role.ADMIN);
+  const { error } = await requireRole(Role.OWNER, Role.ADMIN);
   if (error) return error;
 
   const model = await prisma.modelProfile.findUnique({

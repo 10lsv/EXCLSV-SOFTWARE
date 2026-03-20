@@ -15,7 +15,7 @@ function getWeekRange(date: Date = new Date()) {
 }
 
 // GET /api/content/tasks/my — tâches de la semaine en cours pour la modèle connectée
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const { error, session } = await requireRole(Role.MODEL, Role.OWNER, Role.ADMIN);
   if (error) return error;
 

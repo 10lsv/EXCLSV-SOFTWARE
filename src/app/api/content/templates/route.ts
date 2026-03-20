@@ -5,7 +5,7 @@ import { jsonSuccess, jsonError, requireRole, logAudit } from "@/lib/api-utils";
 
 // GET /api/content/templates?modelId=xxx
 export async function GET(req: NextRequest) {
-  const { error, session } = await requireRole(Role.OWNER, Role.ADMIN);
+  const { error } = await requireRole(Role.OWNER, Role.ADMIN);
   if (error) return error;
 
   const modelId = req.nextUrl.searchParams.get("modelId");

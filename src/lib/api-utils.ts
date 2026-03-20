@@ -30,6 +30,12 @@ export async function logAudit(
   details?: Record<string, unknown>
 ) {
   await prisma.auditLog.create({
-    data: { userId, action, entity, entityId, details },
+    data: {
+      userId,
+      action,
+      entity,
+      entityId,
+      details: details as Parameters<typeof prisma.auditLog.create>[0]["data"]["details"],
+    },
   });
 }

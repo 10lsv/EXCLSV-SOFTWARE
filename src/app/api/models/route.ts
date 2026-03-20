@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Full endpoint: admin only
-  const { error, session } = await requireRole(Role.OWNER, Role.ADMIN);
+  const { error } = await requireRole(Role.OWNER, Role.ADMIN);
   if (error) return error;
 
   const search = searchParams.get("search") || "";
