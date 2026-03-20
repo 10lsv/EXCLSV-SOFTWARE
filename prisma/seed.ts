@@ -243,15 +243,15 @@ async function main() {
     });
     console.log(`Templates created for ${mp.stageName} (${templateData.length} categories).`);
 
-    // Générer tâches pour semaine en cours et semaine précédente
+    // Générer tâches pour semaine en cours et semaine précédente (UTC)
     const now = new Date();
-    const dayOfWeek = now.getDay();
-    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const thisMonday = new Date(now);
-    thisMonday.setDate(now.getDate() + mondayOffset);
-    thisMonday.setHours(0, 0, 0, 0);
+    const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const dayUTC = todayUTC.getUTCDay();
+    const mondayOffset = dayUTC === 0 ? -6 : 1 - dayUTC;
+    const thisMonday = new Date(todayUTC);
+    thisMonday.setUTCDate(todayUTC.getUTCDate() + mondayOffset);
     const lastMonday = new Date(thisMonday);
-    lastMonday.setDate(thisMonday.getDate() - 7);
+    lastMonday.setUTCDate(thisMonday.getUTCDate() - 7);
 
     const templates = await prisma.weeklyContentTemplate.findMany({
       where: { modelId: mp.id, isActive: true },
