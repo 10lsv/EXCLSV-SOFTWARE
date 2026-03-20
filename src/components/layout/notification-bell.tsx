@@ -15,6 +15,7 @@ import {
   DollarSign,
   MessageSquare,
   CheckCircle2,
+  CheckCircle,
   Info,
   X,
 } from "lucide-react";
@@ -44,6 +45,47 @@ function getNotifIcon(type: string) {
   return typeIcons[type] || typeIcons.DEFAULT;
 }
 
+function getNotifColor(type: string) {
+  if (type.includes("MESSAGE")) {
+    return {
+      border: "border-l-violet-500",
+      bg: "bg-violet-50/40 dark:bg-violet-950/15",
+      icon: "text-violet-500",
+      dot: "bg-violet-500",
+    };
+  }
+  if (type.includes("COMPLETED") || type.includes("STATUS")) {
+    return {
+      border: "border-l-emerald-500",
+      bg: "bg-emerald-50/40 dark:bg-emerald-950/15",
+      icon: "text-emerald-500",
+      dot: "bg-emerald-500",
+    };
+  }
+  if (type.includes("INVOICE")) {
+    return {
+      border: "border-l-amber-500",
+      bg: "bg-amber-50/40 dark:bg-amber-950/15",
+      icon: "text-amber-500",
+      dot: "bg-amber-500",
+    };
+  }
+  if (type.includes("CUSTOM")) {
+    return {
+      border: "border-l-blue-500",
+      bg: "bg-blue-50/40 dark:bg-blue-950/15",
+      icon: "text-blue-500",
+      dot: "bg-blue-500",
+    };
+  }
+  return {
+    border: "border-l-gray-400",
+    bg: "bg-gray-50/40 dark:bg-gray-950/15",
+    icon: "text-gray-400",
+    dot: "bg-gray-400",
+  };
+}
+
 interface NotificationBellProps {
   notificationsPath: string;
 }
@@ -55,11 +97,16 @@ export function NotificationBell({ notificationsPath }: NotificationBellProps) {
   const [open, setOpen] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
-    const res = await fetch("/api/notifications?source=popover");
-    const json = await res.json();
-    if (json.success) {
-      setNotifications(json.data.notifications);
-      setUnreadCount(json.data.unreadCount);
+    try {
+      const res = await fetch("/api/notifications?source=popover");
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.success) {
+        setNotifications(json.data.notifications);
+        setUnreadCount(json.data.unreadCount);
+      }
+    } catch {
+      // Silently ignore fetch/parse errors
     }
   }, []);
 
@@ -73,9 +120,7 @@ export function NotificationBell({ notificationsPath }: NotificationBellProps) {
     if (!notif.isRead) {
       await fetch(`/api/notifications/${notif.id}/read`, { method: "PATCH" });
       setUnreadCount((c) => Math.max(0, c - 1));
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notif.id ? { ...n, isRead: true } : n))
-      );
+      setNotifications((prev) => prev.filter((n) => n.id !== notif.id));
     }
     setOpen(false);
     if (notif.link) router.push(notif.link);
@@ -83,13 +128,8 @@ export function NotificationBell({ notificationsPath }: NotificationBellProps) {
 
   async function handleDismiss(e: React.MouseEvent, notifId: string) {
     e.stopPropagation();
-    const notif = notifications.find((n) => n.id === notifId);
-    // Masquer du volet (ne supprime PAS de la base de données)
     await fetch(`/api/notifications/${notifId}/dismiss`, { method: "PATCH" });
     setNotifications((prev) => prev.filter((n) => n.id !== notifId));
-    if (notif && !notif.isRead) {
-      setUnreadCount((c) => Math.max(0, c - 1));
-    }
   }
 
   return (
@@ -116,45 +156,36 @@ export function NotificationBell({ notificationsPath }: NotificationBellProps) {
         <Separator />
 
         {notifications.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-            Aucune notification
+          <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+            <CheckCircle className="h-8 w-8 text-emerald-500" />
+            <p className="text-sm font-medium text-muted-foreground">
+              Vous êtes à jour !
+            </p>
           </div>
         ) : (
           <div className="max-h-[360px] overflow-y-auto">
             {notifications.map((notif) => {
               const Icon = getNotifIcon(notif.type);
+              const colors = getNotifColor(notif.type);
               return (
                 <button
                   key={notif.id}
                   onClick={() => handleClick(notif)}
                   className={cn(
-                    "group flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50",
-                    !notif.isRead && "bg-blue-50/50 dark:bg-blue-950/20"
+                    "group flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 border-l-4",
+                    colors.border,
+                    colors.bg
                   )}
                 >
                   <div className="mt-0.5 shrink-0">
-                    <Icon
-                      className={cn(
-                        "h-4 w-4",
-                        !notif.isRead
-                          ? "text-blue-500"
-                          : "text-muted-foreground"
-                      )}
-                    />
+                    <Icon className={cn("h-4 w-4", colors.icon)} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p
-                        className={cn(
-                          "text-sm truncate",
-                          !notif.isRead ? "font-semibold" : "font-medium"
-                        )}
-                      >
+                      <p className="text-sm font-semibold truncate">
                         {notif.title}
                       </p>
-                      {!notif.isRead && (
-                        <span className="h-2 w-2 shrink-0 rounded-full bg-blue-500" />
-                      )}
+                      <span className={cn("h-2 w-2 shrink-0 rounded-full", colors.dot)} />
                     </div>
                     <p className="text-xs text-muted-foreground line-clamp-1">
                       {notif.message}

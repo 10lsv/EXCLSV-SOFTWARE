@@ -23,9 +23,10 @@ export async function GET(req: NextRequest) {
   const userId = session!.user.id;
 
   if (source === "popover") {
-    // Volet déroulant : 5 dernières non-dismissées
+    // Volet déroulant : 5 dernières non lues + non dismissées
     const where = {
       userId,
+      isRead: false,
       dismissedFromPopover: false,
     };
 
