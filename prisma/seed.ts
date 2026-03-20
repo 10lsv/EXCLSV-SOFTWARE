@@ -45,6 +45,32 @@ async function main() {
   }
   console.log(`Chatter: ${chatter.email} (${chatter.id})`);
 
+  // ── Alex — CHATTER ──
+  const alexPassword = await bcrypt.hash("alex123", 12);
+  const alex = await prisma.user.upsert({
+    where: { email: "alex.chatter@exclsv.com" },
+    update: { password: alexPassword },
+    create: {
+      email: "alex.chatter@exclsv.com",
+      name: "Alex",
+      password: alexPassword,
+      role: Role.CHATTER,
+    },
+  });
+  const alexChatterProfile = await prisma.chatterProfile.findUnique({
+    where: { userId: alex.id },
+  });
+  if (!alexChatterProfile) {
+    await prisma.chatterProfile.create({
+      data: {
+        userId: alex.id,
+        hourlyRate: 15,
+        commissionRate: 5,
+      },
+    });
+  }
+  console.log(`Chatter: ${alex.email} (${alex.id})`);
+
   // ── Leo — OWNER ──
   const leoPassword = await bcrypt.hash("Sauveyleo3.", 12);
   const leo = await prisma.user.upsert({
