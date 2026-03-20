@@ -13,11 +13,25 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar,
-  X,
+  GripVertical,
 } from "lucide-react";
 import { cn, getMondayUTC } from "@/lib/utils";
 import { format, addDays, isToday, isSameDay } from "date-fns";
 import { fr } from "date-fns/locale";
+import {
+  DndContext,
+  DragOverlay,
+  useDraggable,
+  useDroppable,
+  type DragStartEvent,
+  type DragEndEvent,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+
+// ─── Types ───
 
 interface PlanEntry {
   id: string;
@@ -37,6 +51,13 @@ interface Task {
   planEntries: PlanEntry[];
 }
 
+interface GroupedEntry {
+  taskId: string;
+  task: Task;
+  totalQty: number;
+  entryIds: string[];
+}
+
 const platformConfig: Record<
   string,
   { color: string; badgeClass: string; calBadge: string }
@@ -44,21 +65,182 @@ const platformConfig: Record<
   OnlyFans: {
     color: "border-l-pink-500",
     badgeClass: "bg-pink-500 text-white",
-    calBadge: "bg-pink-100 text-pink-700 border-pink-200 dark:bg-pink-950 dark:text-pink-300 dark:border-pink-800",
+    calBadge:
+      "bg-pink-100 text-pink-700 border-pink-200 dark:bg-pink-950 dark:text-pink-300 dark:border-pink-800",
   },
   Instagram: {
     color: "border-l-blue-500",
     badgeClass: "bg-blue-500 text-white",
-    calBadge: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800",
+    calBadge:
+      "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800",
   },
   TikTok: {
     color: "border-l-slate-800",
     badgeClass: "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900",
-    calBadge: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600",
+    calBadge:
+      "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-600",
   },
 };
 
 const DAY_LABELS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+
+// ─── Draggable badge in calendar ───
+
+function CalendarBadge({
+  grouped,
+  dayIndex,
+}: {
+  grouped: GroupedEntry;
+  dayIndex: number;
+}) {
+  const dragId = `cal-${grouped.taskId}-${dayIndex}`;
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: dragId,
+    data: {
+      type: "calendar-entry",
+      taskId: grouped.taskId,
+      entryIds: grouped.entryIds,
+      quantity: grouped.totalQty,
+      fromDay: dayIndex,
+    },
+  });
+
+  const config = platformConfig[grouped.task.platform] || {
+    calBadge: "bg-gray-100 text-gray-700 border-gray-200",
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      className={cn(
+        "w-full text-left rounded border px-1.5 py-0.5 text-[10px] font-medium truncate cursor-grab active:cursor-grabbing transition-all",
+        config.calBadge,
+        isDragging && "opacity-30 ring-2 ring-primary"
+      )}
+      title={`${grouped.task.category} (${grouped.totalQty}) — Glisser pour déplacer`}
+    >
+      {grouped.task.category}
+      {grouped.totalQty > 1 && ` (${grouped.totalQty})`}
+    </div>
+  );
+}
+
+// ─── Droppable day column ───
+
+function DayColumn({
+  dayIndex,
+  children,
+  isOver,
+}: {
+  dayIndex: number;
+  children: React.ReactNode;
+  isOver: boolean;
+}) {
+  const { setNodeRef } = useDroppable({
+    id: `day-${dayIndex}`,
+    data: { type: "day", dayIndex },
+  });
+
+  return (
+    <div ref={setNodeRef} className="flex-1 space-y-1 min-h-[40px]">
+      {children}
+      {isOver && (
+        <div className="w-full rounded border-2 border-dashed border-primary/50 bg-primary/10 py-1 text-center text-[9px] text-primary animate-pulse">
+          Deposer ici
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Draggable unplanned task ───
+
+function UnplannedDraggable({
+  task,
+  remaining,
+  dragQty,
+  onQtyChange,
+}: {
+  task: Task;
+  remaining: number;
+  dragQty: number;
+  onQtyChange: (taskId: string, qty: number) => void;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `unplanned-${task.id}`,
+    data: { type: "unplanned", taskId: task.id, quantity: dragQty },
+  });
+
+  const config = platformConfig[task.platform] || {
+    badgeClass: "bg-gray-500 text-white",
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "flex items-center gap-2 rounded-md border px-3 py-2 transition-all",
+        isDragging && "opacity-30 ring-2 ring-primary"
+      )}
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        className="shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
+      >
+        <GripVertical className="h-4 w-4" />
+      </div>
+      <Badge className={cn("text-[10px] shrink-0", config.badgeClass)}>
+        {task.platform}
+      </Badge>
+      <span className="text-sm font-medium flex-1 truncate">
+        {task.category}
+      </span>
+      <span className="text-xs text-muted-foreground shrink-0">
+        {remaining} restant{remaining > 1 ? "s" : ""}
+      </span>
+      <select
+        className="h-6 rounded border bg-background px-1 text-[10px] w-12 shrink-0"
+        value={dragQty}
+        onChange={(e) => onQtyChange(task.id, Number(e.target.value))}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {Array.from({ length: remaining }, (_, i) => i + 1).map((n) => (
+          <option key={n} value={n}>
+            {n}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+// ─── Droppable "unplan" zone ───
+
+function UnplanZone({ isOver }: { isOver: boolean }) {
+  const { setNodeRef } = useDroppable({
+    id: "unplan-zone",
+    data: { type: "unplan" },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "rounded-lg border-2 border-dashed p-3 text-center text-xs text-muted-foreground transition-all",
+        isOver
+          ? "border-destructive bg-destructive/5 text-destructive"
+          : "border-muted-foreground/20"
+      )}
+    >
+      Glisser ici pour retirer du planning
+    </div>
+  );
+}
+
+// ─── Main Page ───
 
 export default function ModelContentPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -66,15 +248,21 @@ export default function ModelContentPage() {
   const [weekEnd, setWeekEnd] = useState("");
   const [loading, setLoading] = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
+  const [dragQtys, setDragQtys] = useState<Record<string, number>>({});
 
-  // Planning form state
-  const [planningTaskId, setPlanningTaskId] = useState<string | null>(null);
-  const [planDay, setPlanDay] = useState(0);
-  const [planQty, setPlanQty] = useState(1);
-  const [planLoading, setPlanLoading] = useState(false);
+  // DnD state
+  const [activeDrag, setActiveDrag] = useState<{
+    label: string;
+    platform: string;
+    quantity: number;
+  } | null>(null);
+  const [overDayIndex, setOverDayIndex] = useState<number | null>(null);
+  const [overUnplan, setOverUnplan] = useState(false);
 
-  // Move entry state
-  const [movingEntry, setMovingEntry] = useState<PlanEntry | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
+  );
 
   const fetchTasks = useCallback(async () => {
     setLoading(true);
@@ -106,6 +294,8 @@ export default function ModelContentPage() {
     fetchTasks();
   }, [fetchTasks]);
 
+  // ─── API helpers ───
+
   async function handleProgress(taskId: string, delta: number) {
     const res = await fetch(`/api/content/tasks/${taskId}/progress`, {
       method: "PATCH",
@@ -116,102 +306,149 @@ export default function ModelContentPage() {
     if (json.success) {
       setTasks((prev) =>
         prev.map((t) =>
-          t.id === taskId ? { ...t, ...json.data, planEntries: t.planEntries } : t
-        )
-      );
-    }
-  }
-
-  async function handlePlanSubmit() {
-    if (!planningTaskId) return;
-    setPlanLoading(true);
-
-    const monday = new Date(weekStart);
-    const plannedDate = addDays(monday, planDay);
-
-    const res = await fetch(`/api/content/tasks/${planningTaskId}/plan`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        plannedDate: plannedDate.toISOString(),
-        quantity: planQty,
-      }),
-    });
-    const json = await res.json();
-    if (json.success) {
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === planningTaskId
-            ? { ...t, planEntries: [...t.planEntries, json.data] }
-            : t
-        )
-      );
-      setPlanningTaskId(null);
-      setPlanQty(1);
-    }
-    setPlanLoading(false);
-  }
-
-  async function handleDeleteEntry(entryId: string) {
-    const res = await fetch(`/api/content/plan/${entryId}`, { method: "DELETE" });
-    const json = await res.json();
-    if (json.success) {
-      setTasks((prev) =>
-        prev.map((t) => ({
-          ...t,
-          planEntries: t.planEntries.filter((e) => e.id !== entryId),
-        }))
-      );
-      setMovingEntry(null);
-    }
-  }
-
-  async function handleMoveEntry(entry: PlanEntry, newDayIndex: number) {
-    // Delete old, create new
-    await handleDeleteEntry(entry.id);
-    const monday = new Date(weekStart);
-    const plannedDate = addDays(monday, newDayIndex);
-
-    const res = await fetch(`/api/content/tasks/${entry.taskId}/plan`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        plannedDate: plannedDate.toISOString(),
-        quantity: entry.quantity,
-      }),
-    });
-    const json = await res.json();
-    if (json.success) {
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === entry.taskId
-            ? { ...t, planEntries: [...t.planEntries, json.data] }
+          t.id === taskId
+            ? { ...t, ...json.data, planEntries: t.planEntries }
             : t
         )
       );
     }
-    setMovingEntry(null);
   }
 
-  // Build week days
+  async function planTask(taskId: string, dayIndex: number, quantity: number) {
+    const monday = new Date(weekStart);
+    const plannedDate = addDays(monday, dayIndex);
+
+    const res = await fetch(`/api/content/tasks/${taskId}/plan`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plannedDate: plannedDate.toISOString(),
+        quantity,
+      }),
+    });
+    const json = await res.json();
+    if (json.success) {
+      // The API may have merged with an existing entry — update or add
+      const updatedEntry = json.data as PlanEntry;
+      setTasks((prev) =>
+        prev.map((t) => {
+          if (t.id !== taskId) return t;
+          const existingIdx = t.planEntries.findIndex(
+            (e) => e.id === updatedEntry.id
+          );
+          if (existingIdx >= 0) {
+            const newEntries = [...t.planEntries];
+            newEntries[existingIdx] = updatedEntry;
+            return { ...t, planEntries: newEntries };
+          }
+          return { ...t, planEntries: [...t.planEntries, updatedEntry] };
+        })
+      );
+    }
+  }
+
+  async function deleteEntries(entryIds: string[]) {
+    for (const id of entryIds) {
+      await fetch(`/api/content/plan/${id}`, { method: "DELETE" });
+    }
+    setTasks((prev) =>
+      prev.map((t) => ({
+        ...t,
+        planEntries: t.planEntries.filter((e) => !entryIds.includes(e.id)),
+      }))
+    );
+  }
+
+  // ─── DnD handlers ───
+
+  function handleDragStart(event: DragStartEvent) {
+    const data = event.active.data.current;
+    if (!data) return;
+    const task = tasks.find((t) => t.id === data.taskId);
+    if (!task) return;
+    setActiveDrag({
+      label: task.category,
+      platform: task.platform,
+      quantity: data.quantity,
+    });
+  }
+
+  function handleDragOver(event: DragEndEvent) {
+    const overId = event.over?.id?.toString() || "";
+    const overData = event.over?.data?.current;
+    if (overData?.type === "day") {
+      setOverDayIndex(overData.dayIndex);
+      setOverUnplan(false);
+    } else if (overData?.type === "unplan") {
+      setOverDayIndex(null);
+      setOverUnplan(true);
+    } else {
+      setOverDayIndex(null);
+      setOverUnplan(false);
+    }
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    const activeData = event.active.data.current;
+    const overData = event.over?.data?.current;
+
+    setActiveDrag(null);
+    setOverDayIndex(null);
+    setOverUnplan(false);
+
+    if (!activeData || !overData) return;
+
+    // Drop on a day
+    if (overData.type === "day") {
+      const targetDay = overData.dayIndex as number;
+
+      if (activeData.type === "unplanned") {
+        // Unplanned → day
+        await planTask(activeData.taskId, targetDay, activeData.quantity);
+      } else if (activeData.type === "calendar-entry") {
+        // Calendar → different day (move)
+        if (activeData.fromDay === targetDay) return;
+        await deleteEntries(activeData.entryIds);
+        await planTask(activeData.taskId, targetDay, activeData.quantity);
+      }
+    }
+
+    // Drop on unplan zone
+    if (overData.type === "unplan" && activeData.type === "calendar-entry") {
+      await deleteEntries(activeData.entryIds);
+    }
+  }
+
+  // ─── Data helpers ───
+
   const weekDays = weekStart
     ? Array.from({ length: 7 }, (_, i) => addDays(new Date(weekStart), i))
     : [];
 
-  // Get entries for a specific day
-  function getEntriesForDay(dayDate: Date) {
-    const entries: (PlanEntry & { task: Task })[] = [];
+  // Group entries by taskId per day (fixes stacking)
+  function getGroupedEntriesForDay(dayDate: Date): GroupedEntry[] {
+    const map = new Map<string, GroupedEntry>();
     for (const task of tasks) {
       for (const entry of task.planEntries) {
         if (isSameDay(new Date(entry.plannedDate), dayDate)) {
-          entries.push({ ...entry, task });
+          const existing = map.get(task.id);
+          if (existing) {
+            existing.totalQty += entry.quantity;
+            existing.entryIds.push(entry.id);
+          } else {
+            map.set(task.id, {
+              taskId: task.id,
+              task,
+              totalQty: entry.quantity,
+              entryIds: [entry.id],
+            });
+          }
         }
       }
     }
-    return entries;
+    return Array.from(map.values());
   }
 
-  // Unplanned tasks (where planned qty < target)
   function getUnplannedTasks() {
     return tasks
       .map((t) => {
@@ -229,7 +466,6 @@ export default function ModelContentPage() {
     groups[t.platform].push(t);
   }
 
-  // Stats globales
   const totalTarget = tasks.reduce((s, t) => s + t.targetQuantity, 0);
   const totalDone = tasks.reduce((s, t) => s + t.completedQuantity, 0);
   const globalPct =
@@ -261,409 +497,338 @@ export default function ModelContentPage() {
   const unplannedTasks = getUnplannedTasks();
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Mon contenu</h1>
-        <p className="text-sm text-muted-foreground">
-          Semaine du{" "}
-          {weekStart &&
-            format(new Date(weekStart), "d MMMM", { locale: fr })}{" "}
-          au{" "}
-          {weekEnd &&
-            format(new Date(weekEnd), "d MMMM yyyy", { locale: fr })}
-        </p>
-      </div>
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Mon contenu</h1>
+          <p className="text-sm text-muted-foreground">
+            Semaine du{" "}
+            {weekStart &&
+              format(new Date(weekStart), "d MMMM", { locale: fr })}{" "}
+            au{" "}
+            {weekEnd &&
+              format(new Date(weekEnd), "d MMMM yyyy", { locale: fr })}
+          </p>
+        </div>
 
-      {/* ─── Calendrier hebdomadaire ─── */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <CardTitle className="text-base">Planning de la semaine</CardTitle>
-            </div>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => setWeekOffset((o) => o - 1)}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => setWeekOffset(0)}
-              >
-                Aujourd&apos;hui
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => setWeekOffset((o) => o + 1)}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <div className="overflow-x-auto -mx-6 px-6 pb-2">
-            <div className="grid grid-cols-7 gap-1.5 min-w-[560px]">
-              {weekDays.map((day, i) => {
-                const entries = getEntriesForDay(day);
-                const dayTotal = entries.reduce((s, e) => s + e.quantity, 0);
-                const today = isToday(day);
-
-                return (
-                  <div
-                    key={i}
-                    className={cn(
-                      "rounded-lg border p-2 min-h-[120px] flex flex-col",
-                      today && "border-primary border-2 bg-primary/5",
-                      dayTotal >= 5 && "bg-amber-50/50 dark:bg-amber-950/10",
-                      dayTotal >= 8 && "bg-orange-50/50 dark:bg-orange-950/10"
-                    )}
-                  >
-                    {/* Header du jour */}
-                    <div className="text-center mb-1.5">
-                      <div
-                        className={cn(
-                          "text-[10px] font-medium uppercase tracking-wider",
-                          today ? "text-primary" : "text-muted-foreground"
-                        )}
-                      >
-                        {DAY_LABELS[i]}
-                      </div>
-                      <div
-                        className={cn(
-                          "text-xs",
-                          today ? "font-bold text-primary" : "text-muted-foreground"
-                        )}
-                      >
-                        {format(day, "dd/MM")}
-                      </div>
-                    </div>
-
-                    {/* Badges des tâches */}
-                    <div className="flex-1 space-y-1">
-                      {entries.map((entry) => {
-                        const config =
-                          platformConfig[entry.task.platform] || {
-                            calBadge: "bg-gray-100 text-gray-700 border-gray-200",
-                          };
-                        return (
-                          <button
-                            key={entry.id}
-                            onClick={() =>
-                              setMovingEntry(
-                                movingEntry?.id === entry.id ? null : entry
-                              )
-                            }
-                            className={cn(
-                              "w-full text-left rounded border px-1.5 py-0.5 text-[10px] font-medium truncate transition-all cursor-pointer hover:opacity-80",
-                              config.calBadge,
-                              movingEntry?.id === entry.id &&
-                                "ring-2 ring-primary ring-offset-1"
-                            )}
-                            title={`${entry.task.category} (${entry.quantity}) — Cliquer pour déplacer`}
-                          >
-                            {entry.task.category}
-                            {entry.quantity > 1 && ` (${entry.quantity})`}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Move buttons si une entrée est sélectionnée et ce n'est pas le jour actuel de l'entrée */}
-                    {movingEntry &&
-                      !isSameDay(new Date(movingEntry.plannedDate), day) && (
-                        <button
-                          onClick={() => handleMoveEntry(movingEntry, i)}
-                          className="mt-1 w-full rounded border border-dashed border-primary/40 bg-primary/5 py-0.5 text-[9px] text-primary hover:bg-primary/10 transition-colors"
-                        >
-                          Déplacer ici
-                        </button>
-                      )}
-
-                    {/* Footer : total du jour */}
-                    {dayTotal > 0 && (
-                      <div className="mt-1 text-center text-[10px] text-muted-foreground font-medium border-t pt-1">
-                        {dayTotal} contenu{dayTotal > 1 ? "s" : ""}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Actions sur l'entrée sélectionnée */}
-          {movingEntry && (
-            <div className="mt-3 flex items-center gap-2 rounded-lg border bg-muted/50 p-2.5 text-sm">
-              <span className="flex-1 text-xs">
-                <strong>
-                  {tasks.find((t) => t.id === movingEntry.taskId)?.category}
-                </strong>{" "}
-                ({movingEntry.quantity}) — Cliquer sur un jour pour déplacer
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => handleDeleteEntry(movingEntry.id)}
-              >
-                <X className="h-3 w-3 mr-1" />
-                Retirer
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => setMovingEntry(null)}
-              >
-                Annuler
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ─── Contenu à planifier ─── */}
-      {unplannedTasks.length > 0 && (
+        {/* ─── Calendrier hebdomadaire ─── */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Contenu à planifier</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1.5 pt-0">
-            {unplannedTasks.map(({ task, planned, remaining }) => {
-              const config = platformConfig[task.platform] || {
-                badgeClass: "bg-gray-500 text-white",
-              };
-              const isOpen = planningTaskId === task.id;
-
-              return (
-                <div key={task.id} className="rounded-md border">
-                  <div className="flex items-center gap-2 px-3 py-2">
-                    <Badge
-                      className={cn("text-[10px] shrink-0", config.badgeClass)}
-                    >
-                      {task.platform}
-                    </Badge>
-                    <span className="text-sm font-medium flex-1 truncate">
-                      {task.category}
-                    </span>
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {remaining}/{task.targetQuantity} restant{remaining > 1 ? "s" : ""}
-                    </span>
-                    <Button
-                      variant={isOpen ? "secondary" : "outline"}
-                      size="sm"
-                      className="h-7 text-xs shrink-0"
-                      onClick={() => {
-                        if (isOpen) {
-                          setPlanningTaskId(null);
-                        } else {
-                          setPlanningTaskId(task.id);
-                          setPlanQty(1);
-                          setPlanDay(0);
-                        }
-                      }}
-                    >
-                      {isOpen ? "Annuler" : "Planifier"}
-                    </Button>
-                  </div>
-
-                  {/* Formulaire inline */}
-                  {isOpen && (
-                    <div className="border-t bg-muted/30 px-3 py-2.5 flex items-center gap-3 flex-wrap">
-                      <div className="flex items-center gap-1.5">
-                        <label className="text-xs text-muted-foreground">Jour :</label>
-                        <select
-                          className="h-7 rounded border bg-background px-2 text-xs"
-                          value={planDay}
-                          onChange={(e) => setPlanDay(Number(e.target.value))}
-                        >
-                          {weekDays.map((d, i) => (
-                            <option key={i} value={i}>
-                              {DAY_LABELS[i]} {format(d, "dd/MM")}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <label className="text-xs text-muted-foreground">Qté :</label>
-                        <input
-                          type="number"
-                          min={1}
-                          max={remaining}
-                          value={planQty}
-                          onChange={(e) =>
-                            setPlanQty(
-                              Math.max(1, Math.min(remaining, Number(e.target.value)))
-                            )
-                          }
-                          className="h-7 w-14 rounded border bg-background px-2 text-xs text-center"
-                        />
-                      </div>
-                      <Button
-                        size="sm"
-                        className="h-7 text-xs"
-                        onClick={handlePlanSubmit}
-                        disabled={planLoading}
-                      >
-                        {planLoading ? "..." : "Confirmer"}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ─── Barre de progression globale ─── */}
-      <Card>
-        <CardContent className="p-5">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">Progression de la semaine</span>
-            <span
-              className={cn(
-                "text-3xl font-bold",
-                globalPct >= 100
-                  ? "text-emerald-600"
-                  : globalPct > 50
-                    ? "text-blue-600"
-                    : "text-orange-600"
-              )}
-            >
-              {globalPct}%
-            </span>
-          </div>
-          <Progress value={globalPct} className="h-3" />
-          <p className="mt-1 text-xs text-muted-foreground">
-            {totalDone}/{totalTarget} éléments complétés
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* ─── Cards par plateforme ─── */}
-      {Object.entries(groups).map(([platform, items]) => {
-        const config = platformConfig[platform] || {
-          color: "border-l-gray-400",
-          badgeClass: "bg-gray-500 text-white",
-        };
-        const pTarget = items.reduce((s, t) => s + t.targetQuantity, 0);
-        const pDone = items.reduce((s, t) => s + t.completedQuantity, 0);
-        const pPct = pTarget > 0 ? Math.round((pDone / pTarget) * 100) : 0;
-
-        return (
-          <Card key={platform} className={cn("border-l-4", config.color)}>
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Badge className={cn("text-xs", config.badgeClass)}>
-                    {platform}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {pDone}/{pTarget}
-                  </span>
-                </div>
-                <span
-                  className={cn(
-                    "text-sm font-bold",
-                    pPct >= 100
-                      ? "text-emerald-600"
-                      : pPct > 50
-                        ? "text-blue-600"
-                        : "text-muted-foreground"
-                  )}
-                >
-                  {pPct}%
-                </span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-base">
+                  Planning de la semaine
+                </CardTitle>
               </div>
-              <Progress value={pPct} className="h-1.5 mt-1" />
-            </CardHeader>
-            <CardContent className="space-y-1 pt-0">
-              {items.map((task) => {
-                const pct =
-                  task.targetQuantity > 0
-                    ? Math.round(
-                        (task.completedQuantity / task.targetQuantity) * 100
-                      )
-                    : 0;
-                const isDone = task.completedQuantity >= task.targetQuantity;
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => setWeekOffset((o) => o - 1)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setWeekOffset(0)}
+                >
+                  Aujourd&apos;hui
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={() => setWeekOffset((o) => o + 1)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="overflow-x-auto -mx-6 px-6 pb-2">
+              <div className="grid grid-cols-7 gap-1.5 min-w-[560px]">
+                {weekDays.map((day, i) => {
+                  const grouped = getGroupedEntriesForDay(day);
+                  const dayTotal = grouped.reduce(
+                    (s, g) => s + g.totalQty,
+                    0
+                  );
+                  const today = isToday(day);
+                  const isDropTarget = overDayIndex === i;
 
-                return (
-                  <div
-                    key={task.id}
-                    className={cn(
-                      "flex items-center gap-3 rounded-md border px-3 py-2.5",
-                      isDone && "bg-emerald-50/50 dark:bg-emerald-950/10"
-                    )}
-                  >
-                    <span
+                  return (
+                    <div
+                      key={i}
                       className={cn(
-                        "text-sm flex-1 min-w-0 truncate",
-                        isDone
-                          ? "text-emerald-700 font-medium line-through"
-                          : "font-medium"
+                        "rounded-lg border p-2 min-h-[120px] flex flex-col transition-all",
+                        today && "border-primary border-2 bg-primary/5",
+                        !today &&
+                          dayTotal >= 5 &&
+                          "bg-amber-50/50 dark:bg-amber-950/10",
+                        !today &&
+                          dayTotal >= 8 &&
+                          "bg-orange-50/50 dark:bg-orange-950/10",
+                        isDropTarget &&
+                          "ring-2 ring-primary bg-primary/10 border-primary"
                       )}
                     >
-                      {task.category}
-                    </span>
+                      <div className="text-center mb-1.5">
+                        <div
+                          className={cn(
+                            "text-[10px] font-medium uppercase tracking-wider",
+                            today
+                              ? "text-primary"
+                              : "text-muted-foreground"
+                          )}
+                        >
+                          {DAY_LABELS[i]}
+                        </div>
+                        <div
+                          className={cn(
+                            "text-xs",
+                            today
+                              ? "font-bold text-primary"
+                              : "text-muted-foreground"
+                          )}
+                        >
+                          {format(day, "dd/MM")}
+                        </div>
+                      </div>
 
-                    <span className="text-xs text-muted-foreground shrink-0 w-10 text-right">
-                      {task.completedQuantity}/{task.targetQuantity}
-                    </span>
+                      <DayColumn dayIndex={i} isOver={isDropTarget}>
+                        {grouped.map((g) => (
+                          <CalendarBadge
+                            key={g.taskId}
+                            grouped={g}
+                            dayIndex={i}
+                          />
+                        ))}
+                      </DayColumn>
 
-                    <Progress
-                      value={pct}
-                      className="h-1.5 w-16 shrink-0"
-                    />
-
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        className="h-7 w-7"
-                        onClick={() => handleProgress(task.id, -1)}
-                        disabled={task.completedQuantity <= 0}
-                      >
-                        <Minus className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        className="h-7 w-7"
-                        onClick={() => handleProgress(task.id, 1)}
-                        disabled={isDone}
-                      >
-                        <Plus className="h-3 w-3" />
-                      </Button>
+                      {dayTotal > 0 && (
+                        <div className="mt-1 text-center text-[10px] text-muted-foreground font-medium border-t pt-1">
+                          {dayTotal} contenu{dayTotal > 1 ? "s" : ""}
+                        </div>
+                      )}
                     </div>
+                  );
+                })}
+              </div>
+            </div>
 
-                    {task.driveLink && (
-                      <a
-                        href={task.driveLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="shrink-0"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground hover:text-primary" />
-                      </a>
-                    )}
-                  </div>
-                );
-              })}
+            {/* Unplan drop zone — visible when dragging from calendar */}
+            {activeDrag && (
+              <div className="mt-3">
+                <UnplanZone isOver={overUnplan} />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ─── Contenu à planifier (draggable) ─── */}
+        {unplannedTasks.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">
+                Contenu à planifier
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Glissez les tâches vers un jour du calendrier
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-1.5 pt-0">
+              {unplannedTasks.map(({ task, remaining }) => (
+                <UnplannedDraggable
+                  key={task.id}
+                  task={task}
+                  remaining={remaining}
+                  dragQty={dragQtys[task.id] || 1}
+                  onQtyChange={(id, qty) =>
+                    setDragQtys((prev) => ({ ...prev, [id]: qty }))
+                  }
+                />
+              ))}
             </CardContent>
           </Card>
-        );
-      })}
-    </div>
+        )}
+
+        {/* ─── Barre de progression globale ─── */}
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium">
+                Progression de la semaine
+              </span>
+              <span
+                className={cn(
+                  "text-3xl font-bold",
+                  globalPct >= 100
+                    ? "text-emerald-600"
+                    : globalPct > 50
+                      ? "text-blue-600"
+                      : "text-orange-600"
+                )}
+              >
+                {globalPct}%
+              </span>
+            </div>
+            <Progress value={globalPct} className="h-3" />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {totalDone}/{totalTarget} éléments complétés
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* ─── Cards par plateforme ─── */}
+        {Object.entries(groups).map(([platform, items]) => {
+          const config = platformConfig[platform] || {
+            color: "border-l-gray-400",
+            badgeClass: "bg-gray-500 text-white",
+          };
+          const pTarget = items.reduce((s, t) => s + t.targetQuantity, 0);
+          const pDone = items.reduce(
+            (s, t) => s + t.completedQuantity,
+            0
+          );
+          const pPct =
+            pTarget > 0 ? Math.round((pDone / pTarget) * 100) : 0;
+
+          return (
+            <Card
+              key={platform}
+              className={cn("border-l-4", config.color)}
+            >
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge className={cn("text-xs", config.badgeClass)}>
+                      {platform}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {pDone}/{pTarget}
+                    </span>
+                  </div>
+                  <span
+                    className={cn(
+                      "text-sm font-bold",
+                      pPct >= 100
+                        ? "text-emerald-600"
+                        : pPct > 50
+                          ? "text-blue-600"
+                          : "text-muted-foreground"
+                    )}
+                  >
+                    {pPct}%
+                  </span>
+                </div>
+                <Progress value={pPct} className="h-1.5 mt-1" />
+              </CardHeader>
+              <CardContent className="space-y-1 pt-0">
+                {items.map((task) => {
+                  const pct =
+                    task.targetQuantity > 0
+                      ? Math.round(
+                          (task.completedQuantity / task.targetQuantity) *
+                            100
+                        )
+                      : 0;
+                  const isDone =
+                    task.completedQuantity >= task.targetQuantity;
+
+                  return (
+                    <div
+                      key={task.id}
+                      className={cn(
+                        "flex items-center gap-3 rounded-md border px-3 py-2.5",
+                        isDone &&
+                          "bg-emerald-50/50 dark:bg-emerald-950/10"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "text-sm flex-1 min-w-0 truncate",
+                          isDone
+                            ? "text-emerald-700 font-medium line-through"
+                            : "font-medium"
+                        )}
+                      >
+                        {task.category}
+                      </span>
+
+                      <span className="text-xs text-muted-foreground shrink-0 w-10 text-right">
+                        {task.completedQuantity}/{task.targetQuantity}
+                      </span>
+
+                      <Progress
+                        value={pct}
+                        className="h-1.5 w-16 shrink-0"
+                      />
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          className="h-7 w-7"
+                          onClick={() => handleProgress(task.id, -1)}
+                          disabled={task.completedQuantity <= 0}
+                        >
+                          <Minus className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          className="h-7 w-7"
+                          onClick={() => handleProgress(task.id, 1)}
+                          disabled={isDone}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                      </div>
+
+                      {task.driveLink && (
+                        <a
+                          href={task.driveLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5 text-muted-foreground hover:text-primary" />
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* ─── Drag overlay ─── */}
+      <DragOverlay>
+        {activeDrag && (
+          <div
+            className={cn(
+              "rounded border px-2 py-1 text-xs font-medium shadow-lg opacity-90",
+              platformConfig[activeDrag.platform]?.calBadge ||
+                "bg-gray-100 text-gray-700 border-gray-200"
+            )}
+          >
+            {activeDrag.label}
+            {activeDrag.quantity > 1 && ` (${activeDrag.quantity})`}
+          </div>
+        )}
+      </DragOverlay>
+    </DndContext>
   );
 }

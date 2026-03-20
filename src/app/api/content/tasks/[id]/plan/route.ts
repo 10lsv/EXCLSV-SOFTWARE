@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { jsonSuccess, jsonError, requireRole } from "@/lib/api-utils";
 
-// PATCH /api/content/tasks/[id]/plan — ajouter une entrée de planning
+// PATCH /api/content/tasks/[id]/plan — ajouter/fusionner une entrée de planning
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -25,7 +25,6 @@ export async function PATCH(
 
   if (!task) return jsonError("Tâche introuvable", 404);
 
-  // Vérifier que la modèle ne modifie que ses propres tâches
   if (session!.user.role === "MODEL" && task.model.userId !== session!.user.id) {
     return jsonError("Accès interdit", 403);
   }
@@ -39,13 +38,36 @@ export async function PATCH(
     );
   }
 
-  const entry = await prisma.contentPlanEntry.create({
-    data: {
+  // Normaliser la date à UTC midnight pour la comparaison
+  const dateObj = new Date(plannedDate);
+  const dayStart = new Date(Date.UTC(dateObj.getUTCFullYear(), dateObj.getUTCMonth(), dateObj.getUTCDate()));
+  const dayEnd = new Date(dayStart);
+  dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+
+  // Chercher une entrée existante pour le même jour
+  const existing = await prisma.contentPlanEntry.findFirst({
+    where: {
       taskId: params.id,
-      plannedDate: new Date(plannedDate),
-      quantity,
+      plannedDate: { gte: dayStart, lt: dayEnd },
     },
   });
+
+  let entry;
+  if (existing) {
+    // Fusionner : additionner la quantité
+    entry = await prisma.contentPlanEntry.update({
+      where: { id: existing.id },
+      data: { quantity: existing.quantity + quantity },
+    });
+  } else {
+    entry = await prisma.contentPlanEntry.create({
+      data: {
+        taskId: params.id,
+        plannedDate: dayStart,
+        quantity,
+      },
+    });
+  }
 
   return jsonSuccess(entry, 201);
 }

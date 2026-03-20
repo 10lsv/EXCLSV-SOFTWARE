@@ -64,7 +64,6 @@ export async function GET(req: NextRequest) {
         })),
       });
 
-      // Re-fetch avec planEntries
       tasks = await prisma.weeklyContentTask.findMany({
         where: { modelId: modelProfile.id, weekStart: monday },
         include: {
