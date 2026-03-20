@@ -6,6 +6,7 @@ import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { UserMenu } from "@/components/layout/user-menu";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
 import { NotificationBell } from "@/components/layout/notification-bell";
+import { PushNotificationBanner } from "@/components/layout/push-notification-banner";
 import { Separator } from "@/components/ui/separator";
 
 const notifPathByRole: Record<string, string> = {
@@ -71,7 +72,10 @@ export default async function DashboardLayout({
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+          <PushNotificationBanner />
+          {children}
+        </main>
       </div>
     </div>
   );

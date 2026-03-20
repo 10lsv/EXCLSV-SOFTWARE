@@ -1,4 +1,41 @@
 import { prisma } from "@/lib/prisma";
+import webpush from "web-push";
+
+// Configure VAPID (silently skip if keys not set)
+if (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    "mailto:contact@exclsv.com",
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+}
+
+/** Send push notification to all subscriptions of a user. */
+async function sendPush(userId: string, payload: { title: string; message: string; link?: string }) {
+  if (!process.env.VAPID_PRIVATE_KEY) return;
+
+  const subscriptions = await prisma.pushSubscription.findMany({
+    where: { userId },
+  });
+
+  for (const sub of subscriptions) {
+    try {
+      await webpush.sendNotification(
+        {
+          endpoint: sub.endpoint,
+          keys: { p256dh: sub.p256dh, auth: sub.auth },
+        },
+        JSON.stringify(payload)
+      );
+    } catch (err: unknown) {
+      // Remove expired/invalid subscriptions
+      const statusCode = (err as { statusCode?: number })?.statusCode;
+      if (statusCode === 410 || statusCode === 404) {
+        await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => {});
+      }
+    }
+  }
+}
 
 export async function createNotification({
   userId,
@@ -13,9 +50,14 @@ export async function createNotification({
   message: string;
   link?: string;
 }) {
-  return prisma.notification.create({
+  const notification = await prisma.notification.create({
     data: { userId, type, title, message, link },
   });
+
+  // Send push in background (don't await to not block response)
+  sendPush(userId, { title, message, link }).catch(() => {});
+
+  return notification;
 }
 
 /** Send the same notification to all OWNER and ADMIN users. */

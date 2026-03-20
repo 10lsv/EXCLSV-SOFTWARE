@@ -56,9 +56,10 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  modelProfile   ModelProfile?
-  chatterProfile ChatterProfile?
-  auditLogs      AuditLog[]
+  modelProfile      ModelProfile?
+  chatterProfile    ChatterProfile?
+  auditLogs         AuditLog[]
+  pushSubscriptions PushSubscription[]
 }
 
 model ModelProfile {
@@ -445,4 +446,16 @@ model Notification {
   dismissedFromPopover Boolean  @default(false)
   link                 String?
   createdAt            DateTime @default(now())
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  endpoint  String
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, endpoint])
 }
