@@ -74,24 +74,21 @@ export default function ModelCustomsPage() {
 
   const weekLabel = `Semaine du ${format(weekStart, "d MMM", { locale: fr })} au ${format(weekEnd, "d MMM yyyy", { locale: fr })}`;
 
-  const statusOrder: Record<string, number> = { NOT_STARTED: 0, IN_PROGRESS: 1, COMPLETED: 2 };
-
   const sortedCustoms = useMemo(() => {
-    const sorted = [...customs];
-    const secondarySort = (a: CustomListItem, b: CustomListItem) => {
+    const applySort = (items: CustomListItem[]) => {
+      const s = [...items];
       switch (sortBy) {
-        case "oldest": return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        case "newest": return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        case "price_desc": return b.totalPrice - a.totalPrice;
-        case "price_asc": return a.totalPrice - b.totalPrice;
-        default: return 0;
+        case "oldest": s.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()); break;
+        case "price_desc": s.sort((a, b) => b.totalPrice - a.totalPrice); break;
+        case "price_asc": s.sort((a, b) => a.totalPrice - b.totalPrice); break;
+        default: s.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       }
+      return s;
     };
-    sorted.sort((a, b) => {
-      const sd = (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
-      return sd !== 0 ? sd : secondarySort(a, b);
-    });
-    return sorted;
+    const active = applySort(customs.filter((c) => c.status !== "COMPLETED"));
+    const completed = [...customs.filter((c) => c.status === "COMPLETED")]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return [...active, ...completed];
   }, [customs, sortBy]);
 
   return (

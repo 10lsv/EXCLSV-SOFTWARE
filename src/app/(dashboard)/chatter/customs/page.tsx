@@ -120,10 +120,9 @@ export default function ChatterCustomsPage() {
           </Button>
         </div>
       ) : (() => {
-        const statusOrder: Record<string, number> = { NOT_STARTED: 0, IN_PROGRESS: 1, COMPLETED: 2 };
-        const sorted = [...customs].sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9));
-        const active = sorted.filter((c) => c.status !== "COMPLETED");
-        const completed = sorted.filter((c) => c.status === "COMPLETED");
+        const active = customs.filter((c) => c.status !== "COMPLETED");
+        const completed = [...customs.filter((c) => c.status === "COMPLETED")]
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
         return (
           <div className="grid gap-3">

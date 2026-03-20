@@ -152,37 +152,31 @@ export default function AdminCustomsPage() {
     fetchStats();
   }
 
-  // Tri par statut (NOT_STARTED > IN_PROGRESS > COMPLETED) puis par date
-  const statusOrder: Record<string, number> = {
-    NOT_STARTED: 0,
-    IN_PROGRESS: 1,
-    COMPLETED: 2,
-  };
-
+  // Tri : actifs (NOT_STARTED + IN_PROGRESS) selon le sélecteur, COMPLETED en bas par date
   const sortedCustoms = useMemo(() => {
-    const sorted = [...customs];
-
-    // Secondary sort (within status group)
-    const secondarySort = (a: CustomListItem, b: CustomListItem) => {
+    const applySort = (items: CustomListItem[]) => {
+      const s = [...items];
       switch (sortBy) {
         case "oldest":
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          s.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+          break;
         case "price_desc":
-          return b.totalPrice - a.totalPrice;
+          s.sort((a, b) => b.totalPrice - a.totalPrice);
+          break;
         case "price_asc":
-          return a.totalPrice - b.totalPrice;
+          s.sort((a, b) => a.totalPrice - b.totalPrice);
+          break;
         default:
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          s.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       }
+      return s;
     };
 
-    sorted.sort((a, b) => {
-      const statusDiff = (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
-      if (statusDiff !== 0) return statusDiff;
-      return secondarySort(a, b);
-    });
+    const active = applySort(customs.filter((c) => c.status !== "COMPLETED"));
+    const completed = [...customs.filter((c) => c.status === "COMPLETED")]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    return sorted;
+    return [...active, ...completed];
   }, [customs, sortBy]);
 
   // Groupement
