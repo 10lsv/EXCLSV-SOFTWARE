@@ -225,8 +225,19 @@ model WeeklyContentTask {
   status            CustomStatus @default(NOT_STARTED)
   driveLink         String?
 
+  planEntries ContentPlanEntry[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model ContentPlanEntry {
+  id          String           @id @default(cuid())
+  taskId      String
+  task        WeeklyContentTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  plannedDate DateTime
+  quantity    Int              @default(1)
+  createdAt   DateTime         @default(now())
 }
 
 model Script {
