@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 
 const DISMISS_KEY = "exclsv-push-dismissed";
 const DISMISS_DAYS = 7;
+const VAPID_FALLBACK = "BBxLO9O5hwSGt2NArohi9j5p3szLI-R_jkbrnhQp1aLRRo7OAkEs14Z_UDq38sOKQjDLeE2llfoYdRy124xCCHs";
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
@@ -46,25 +47,36 @@ export function usePushNotifications() {
     if (Notification.permission === "granted") {
       (async () => {
         try {
+          console.log("[Push] Registering SW...");
           const registration = await navigator.serviceWorker.register("/sw.js");
+          console.log("[Push] SW registered, waiting for ready...");
           await navigator.serviceWorker.ready;
+          console.log("[Push] SW ready");
+
           const existingSub = await registration.pushManager.getSubscription();
+          console.log("[Push] Existing subscription:", existingSub ? existingSub.endpoint.substring(0, 50) : "none");
 
           if (existingSub) {
-            console.log("[Push] Already subscribed:", existingSub.endpoint.substring(0, 50));
+            // Subscription exists in browser — ensure it's saved server-side too
+            const subJson = existingSub.toJSON();
+            console.log("[Push] Syncing existing subscription to server...");
+            await fetch("/api/push/subscribe", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                endpoint: subJson.endpoint,
+                keys: { p256dh: subJson.keys?.p256dh, auth: subJson.keys?.auth },
+              }),
+            }).catch(() => {});
             setSubscribed(true);
             return;
           }
 
           // No subscription yet — auto-subscribe
-          const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-          console.log("[Push] VAPID key:", vapidKey ? "présente" : "MANQUANTE");
-          if (!vapidKey) {
-            console.error("[Push] NEXT_PUBLIC_VAPID_PUBLIC_KEY is missing — cannot auto-subscribe");
-            return;
-          }
-
+          const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || VAPID_FALLBACK;
+          console.log("[Push] VAPID key:", process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ? "env" : "fallback");
           console.log("[Push] Auto-subscribing (permission already granted)");
+
           const subscription = await registration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
@@ -72,6 +84,7 @@ export function usePushNotifications() {
           console.log("[Push] Subscription created:", subscription.endpoint.substring(0, 50));
 
           const subJson = subscription.toJSON();
+          console.log("[Push] Sending to API...");
           const res = await fetch("/api/push/subscribe", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -129,13 +142,8 @@ export function usePushNotifications() {
       console.log("[Push] Service worker registered");
 
       // Subscribe to push
-      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-      console.log("[Push] VAPID key:", vapidKey ? "présente" : "MANQUANTE");
-      if (!vapidKey) {
-        console.error("[Push] NEXT_PUBLIC_VAPID_PUBLIC_KEY is missing — push disabled");
-        setLoading(false);
-        return;
-      }
+      const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || VAPID_FALLBACK;
+      console.log("[Push] VAPID key:", process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ? "env" : "fallback");
 
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
