@@ -129,6 +129,170 @@ async function main() {
   }
   console.log(`Model: ${luna.email} (${luna.id})`);
 
+  // ── Sophia — MODEL ──
+  const sophiaPassword = await bcrypt.hash("sophia123", 12);
+  const sophia = await prisma.user.upsert({
+    where: { email: "sophia@exclsv.com" },
+    update: { password: sophiaPassword },
+    create: {
+      email: "sophia@exclsv.com",
+      name: "Sophia",
+      password: sophiaPassword,
+      role: Role.MODEL,
+    },
+  });
+  const sophiaProfile = await prisma.modelProfile.findUnique({
+    where: { userId: sophia.id },
+  });
+  if (!sophiaProfile) {
+    await prisma.modelProfile.create({
+      data: { userId: sophia.id, stageName: "Sophia" },
+    });
+  }
+  console.log(`Model: ${sophia.email} (${sophia.id})`);
+
+  // ── Mia — MODEL ──
+  const miaPassword = await bcrypt.hash("mia123", 12);
+  const mia = await prisma.user.upsert({
+    where: { email: "mia@exclsv.com" },
+    update: { password: miaPassword },
+    create: {
+      email: "mia@exclsv.com",
+      name: "Mia",
+      password: miaPassword,
+      role: Role.MODEL,
+    },
+  });
+  const miaProfile = await prisma.modelProfile.findUnique({
+    where: { userId: mia.id },
+  });
+  if (!miaProfile) {
+    await prisma.modelProfile.create({
+      data: { userId: mia.id, stageName: "Mia" },
+    });
+  }
+  console.log(`Model: ${mia.email} (${mia.id})`);
+
+  // ── Jules — CHATTER ──
+  const julesPassword = await bcrypt.hash("jules123", 12);
+  const jules = await prisma.user.upsert({
+    where: { email: "jules.chatter@exclsv.com" },
+    update: { password: julesPassword },
+    create: {
+      email: "jules.chatter@exclsv.com",
+      name: "Jules",
+      password: julesPassword,
+      role: Role.CHATTER,
+    },
+  });
+  const julesProfile = await prisma.chatterProfile.findUnique({
+    where: { userId: jules.id },
+  });
+  if (!julesProfile) {
+    await prisma.chatterProfile.create({
+      data: { userId: jules.id, hourlyRate: 15, commissionRate: 5 },
+    });
+  }
+  console.log(`Chatter: ${jules.email} (${jules.id})`);
+
+  // ── Emma — CHATTER ──
+  const emmaPassword = await bcrypt.hash("emma123", 12);
+  const emma = await prisma.user.upsert({
+    where: { email: "emma.chatter@exclsv.com" },
+    update: { password: emmaPassword },
+    create: {
+      email: "emma.chatter@exclsv.com",
+      name: "Emma",
+      password: emmaPassword,
+      role: Role.CHATTER,
+    },
+  });
+  const emmaProfile = await prisma.chatterProfile.findUnique({
+    where: { userId: emma.id },
+  });
+  if (!emmaProfile) {
+    await prisma.chatterProfile.create({
+      data: { userId: emma.id, hourlyRate: 15, commissionRate: 5 },
+    });
+  }
+  console.log(`Chatter: ${emma.email} (${emma.id})`);
+
+  // ── Lucas — CHATTER ──
+  const lucasPassword = await bcrypt.hash("lucas123", 12);
+  const lucas = await prisma.user.upsert({
+    where: { email: "lucas.chatter@exclsv.com" },
+    update: { password: lucasPassword },
+    create: {
+      email: "lucas.chatter@exclsv.com",
+      name: "Lucas",
+      password: lucasPassword,
+      role: Role.CHATTER,
+    },
+  });
+  const lucasProfile = await prisma.chatterProfile.findUnique({
+    where: { userId: lucas.id },
+  });
+  if (!lucasProfile) {
+    await prisma.chatterProfile.create({
+      data: { userId: lucas.id, hourlyRate: 15, commissionRate: 5 },
+    });
+  }
+  console.log(`Chatter: ${lucas.email} (${lucas.id})`);
+
+  // ── Chatter Assignments ──
+  // Get all chatter profile IDs
+  const alexProfile = await prisma.chatterProfile.findUnique({ where: { userId: alex.id } });
+  const julesCP = await prisma.chatterProfile.findUnique({ where: { userId: jules.id } });
+  const emmaCP = await prisma.chatterProfile.findUnique({ where: { userId: emma.id } });
+  const lucasCP = await prisma.chatterProfile.findUnique({ where: { userId: lucas.id } });
+  const lunaMP = await prisma.modelProfile.findUnique({ where: { userId: luna.id } });
+  const sophiaMP = await prisma.modelProfile.findUnique({ where: { userId: sophia.id } });
+  const miaMP = await prisma.modelProfile.findUnique({ where: { userId: mia.id } });
+
+  if (alexProfile && lunaMP) {
+    await prisma.chatterAssignment.upsert({
+      where: { chatterId_modelId: { chatterId: alexProfile.id, modelId: lunaMP.id } },
+      update: {},
+      create: { chatterId: alexProfile.id, modelId: lunaMP.id },
+    });
+  }
+  if (alexProfile && miaMP) {
+    await prisma.chatterAssignment.upsert({
+      where: { chatterId_modelId: { chatterId: alexProfile.id, modelId: miaMP.id } },
+      update: {},
+      create: { chatterId: alexProfile.id, modelId: miaMP.id },
+    });
+  }
+  if (julesCP && lunaMP) {
+    await prisma.chatterAssignment.upsert({
+      where: { chatterId_modelId: { chatterId: julesCP.id, modelId: lunaMP.id } },
+      update: {},
+      create: { chatterId: julesCP.id, modelId: lunaMP.id },
+    });
+  }
+  if (emmaCP && sophiaMP) {
+    await prisma.chatterAssignment.upsert({
+      where: { chatterId_modelId: { chatterId: emmaCP.id, modelId: sophiaMP.id } },
+      update: {},
+      create: { chatterId: emmaCP.id, modelId: sophiaMP.id },
+    });
+  }
+  if (emmaCP && miaMP) {
+    await prisma.chatterAssignment.upsert({
+      where: { chatterId_modelId: { chatterId: emmaCP.id, modelId: miaMP.id } },
+      update: {},
+      create: { chatterId: emmaCP.id, modelId: miaMP.id },
+    });
+  }
+  if (lucasCP && sophiaMP) {
+    await prisma.chatterAssignment.upsert({
+      where: { chatterId_modelId: { chatterId: lucasCP.id, modelId: sophiaMP.id } },
+      update: {},
+      create: { chatterId: lucasCP.id, modelId: sophiaMP.id },
+    });
+  }
+  console.log("Chatter assignments created.");
+
   // Notifications de test pour l'admin
   const adminNotifCount = await prisma.notification.count({
     where: { userId: owner.id },

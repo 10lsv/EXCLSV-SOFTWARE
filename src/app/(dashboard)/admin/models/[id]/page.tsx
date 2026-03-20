@@ -15,7 +15,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ModelForm } from "@/components/models/model-form";
-import { ArrowLeft, Pencil, Trash2, ExternalLink, Loader2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ArrowLeft, Pencil, Trash2, ExternalLink, Loader2, Plus, X } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import type { CreateModelInput } from "@/lib/validations/model";
@@ -114,6 +121,9 @@ export default function ModelDetailPage() {
   const [editOpen, setEditOpen] = useState(searchParams.get("edit") === "true");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [allChatters, setAllChatters] = useState<Array<{ id: string; user: { name: string; email: string } }>>([]);
+  const [selectedChatterId, setSelectedChatterId] = useState("");
+  const [assigning, setAssigning] = useState(false);
 
   const fetchModel = useCallback(async () => {
     const res = await fetch(`/api/models/${params.id}`);
@@ -124,9 +134,39 @@ export default function ModelDetailPage() {
     setLoading(false);
   }, [params.id]);
 
+  const fetchChatters = useCallback(async () => {
+    const res = await fetch("/api/chatters");
+    const json = await res.json();
+    if (json.success) setAllChatters(json.data);
+  }, []);
+
   useEffect(() => {
     fetchModel();
-  }, [fetchModel]);
+    fetchChatters();
+  }, [fetchModel, fetchChatters]);
+
+  async function handleAssign() {
+    if (!selectedChatterId) return;
+    setAssigning(true);
+    const res = await fetch(`/api/models/${params.id}/assignments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chatterId: selectedChatterId }),
+    });
+    if (res.ok) {
+      setSelectedChatterId("");
+      fetchModel();
+    }
+    setAssigning(false);
+  }
+
+  async function handleUnassign(chatterId: string) {
+    if (!confirm("Retirer ce chatter de cette modèle ?")) return;
+    await fetch(`/api/models/${params.id}/assignments/${chatterId}`, {
+      method: "DELETE",
+    });
+    fetchModel();
+  }
 
   async function handleUpdate(data: CreateModelInput) {
     setSaving(true);
@@ -487,13 +527,39 @@ export default function ModelDetailPage() {
 
         <TabsContent value="chatters">
           <Card>
-            <CardContent className="p-6">
+            <CardHeader>
+              <CardTitle className="text-base">Chatters assignés</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Assign new chatter */}
+              <div className="flex gap-2">
+                <Select value={selectedChatterId} onValueChange={setSelectedChatterId}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Sélectionner un chatter..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allChatters
+                      .filter((c) => !model.chatterAssignments.some((a) => a.chatter.id === c.id))
+                      .map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.user.name} ({c.user.email})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <Button onClick={handleAssign} disabled={!selectedChatterId || assigning} size="sm">
+                  {assigning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+                  Assigner
+                </Button>
+              </div>
+
+              {/* Current assignments */}
               {model.chatterAssignments.length === 0 ? (
                 <p className="py-4 text-center text-sm text-muted-foreground">
                   Aucun chatter assigné à cette modèle.
                 </p>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {model.chatterAssignments.map((assignment) => (
                     <div
                       key={assignment.id}
@@ -507,7 +573,14 @@ export default function ModelDetailPage() {
                           {assignment.chatter.user.email}
                         </p>
                       </div>
-                      <Badge variant="secondary">Actif</Badge>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        onClick={() => handleUnassign(assignment.chatter.id)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
                   ))}
                 </div>
