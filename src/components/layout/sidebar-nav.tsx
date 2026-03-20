@@ -101,7 +101,7 @@ export function SidebarNav({ role }: { role: Role }) {
   }, [pollCount]);
 
   return (
-    <nav className="flex flex-col gap-1 px-3 py-2">
+    <nav className="flex flex-col gap-0.5 px-3 py-2">
       {items.map((item) => {
         const isActive = pathname.startsWith(item.href);
         const isNotif = item.label === "Notifications";
@@ -110,10 +110,10 @@ export function SidebarNav({ role }: { role: Role }) {
             key={item.href}
             href={item.href}
             className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
               isActive
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                ? "bg-foreground text-background"
+                : "text-muted-foreground hover:bg-gray-100 hover:text-foreground"
             )}
           >
             <item.icon className="h-4 w-4" />

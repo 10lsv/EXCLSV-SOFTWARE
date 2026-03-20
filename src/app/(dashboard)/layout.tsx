@@ -44,9 +44,9 @@ export default async function DashboardLayout({
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar — desktop */}
-      <aside className="hidden w-64 shrink-0 border-r bg-card md:flex md:flex-col">
+      <aside className="hidden w-64 shrink-0 border-r bg-[#FAFAFA] md:flex md:flex-col">
         <div className="flex h-14 items-center px-6">
-          <h1 className="text-xl font-bold tracking-tight">EXCLSV</h1>
+          <h1 className="text-xl font-black tracking-tighter">EXCLSV</h1>
         </div>
         <Separator />
         <div className="flex-1 overflow-y-auto">
@@ -61,7 +61,7 @@ export default async function DashboardLayout({
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Topbar */}
-        <header className="flex h-14 items-center justify-between border-b bg-card px-4 md:px-6">
+        <header className="flex h-14 items-center justify-between border-b border-gray-100 bg-white px-4 md:px-6">
           <MobileSidebar role={role as Role} />
           <div className="flex items-center gap-2">
             <NotificationBell notificationsPath={notifPathByRole[role] || "/admin/notifications"} />
