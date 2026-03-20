@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Role, CustomStatus, ContentType, Prisma } from "@prisma/client";
 import { jsonSuccess, jsonError, requireRole, logAudit } from "@/lib/api-utils";
 import { createCustomSchema } from "@/lib/validations/custom";
+import { createNotification, notifyAdmins, truncate } from "@/lib/notifications";
 
 // GET /api/customs — list filtered by role
 export async function GET(req: NextRequest) {
@@ -185,6 +186,29 @@ export async function POST(req: NextRequest) {
     custom.id,
     { modelId: data.modelId, totalPrice: data.totalPrice }
   );
+
+  // ─── Notifications ───
+  const chatterName = custom.createdBy.user.name;
+  const modelName = custom.model.stageName;
+  const descShort = truncate(data.description);
+  const types = data.contentType.join(", ");
+
+  // Notifier la modèle
+  await createNotification({
+    userId: model.userId,
+    type: "NEW_CUSTOM",
+    title: "Nouveau custom reçu",
+    message: `${chatterName} a créé un custom ${types} pour vous — ${descShort} (${data.totalPrice}$)`,
+    link: `/model/customs/${custom.id}`,
+  });
+
+  // Notifier les admins
+  await notifyAdmins({
+    type: "NEW_CUSTOM",
+    title: "Nouveau custom créé",
+    message: `${chatterName} a créé un custom pour ${modelName} — ${types} ${descShort} (${data.totalPrice}$)`,
+    link: `/admin/customs/${custom.id}`,
+  });
 
   return jsonSuccess(custom, 201);
 }

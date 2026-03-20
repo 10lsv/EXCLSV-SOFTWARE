@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { jsonSuccess, jsonError, requireRole, logAudit } from "@/lib/api-utils";
 import { createMessageSchema } from "@/lib/validations/custom";
+import { createNotification, notifyAdmins, truncate } from "@/lib/notifications";
 
 // POST /api/customs/[id]/messages — add message to custom thread
 export async function POST(
@@ -77,6 +78,68 @@ export async function POST(
     message.id,
     { customId: params.id }
   );
+
+  // ─── Notifications ───
+  const senderName = sender?.name || "Inconnu";
+  const msgPreview = truncate(parsed.data.content);
+
+  if (role === Role.MODEL) {
+    // Modèle envoie → notifier le chatter créateur
+    const chatterProfile = await prisma.chatterProfile.findUnique({
+      where: { id: custom.createdById },
+      select: { userId: true },
+    });
+    if (chatterProfile) {
+      await createNotification({
+        userId: chatterProfile.userId,
+        type: "CUSTOM_MESSAGE",
+        title: "Nouveau message",
+        message: `${senderName} : "${msgPreview}"`,
+        link: `/chatter/customs/${params.id}`,
+      });
+    }
+  } else if (role === Role.CHATTER) {
+    // Chatter envoie → notifier la modèle
+    await createNotification({
+      userId: custom.model.userId,
+      type: "CUSTOM_MESSAGE",
+      title: "Nouveau message",
+      message: `${senderName} : "${msgPreview}"`,
+      link: `/model/customs/${params.id}`,
+    });
+  } else {
+    // Admin envoie → notifier la modèle + le chatter
+    await createNotification({
+      userId: custom.model.userId,
+      type: "CUSTOM_MESSAGE",
+      title: "Nouveau message",
+      message: `${senderName} : "${msgPreview}"`,
+      link: `/model/customs/${params.id}`,
+    });
+    const chatterProfile = await prisma.chatterProfile.findUnique({
+      where: { id: custom.createdById },
+      select: { userId: true },
+    });
+    if (chatterProfile) {
+      await createNotification({
+        userId: chatterProfile.userId,
+        type: "CUSTOM_MESSAGE",
+        title: "Nouveau message",
+        message: `${senderName} : "${msgPreview}"`,
+        link: `/chatter/customs/${params.id}`,
+      });
+    }
+  }
+
+  // Notifier les admins (sauf si c'est un admin qui envoie)
+  if (role !== Role.OWNER && role !== Role.ADMIN) {
+    await notifyAdmins({
+      type: "CUSTOM_MESSAGE",
+      title: "Nouveau message",
+      message: `${senderName} : "${msgPreview}"`,
+      link: `/admin/customs/${params.id}`,
+    });
+  }
 
   return jsonSuccess({
     ...message,

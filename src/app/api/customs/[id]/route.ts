@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { jsonSuccess, jsonError, requireRole, logAudit } from "@/lib/api-utils";
 import { updateCustomSchema } from "@/lib/validations/custom";
+import { createNotification, notifyAdmins, truncate } from "@/lib/notifications";
 
 async function getCustomWithAccess(customId: string, userId: string, role: Role) {
   const custom = await prisma.customContent.findUnique({
@@ -180,6 +181,45 @@ export async function PATCH(
     params.id,
     { fields: Object.keys(data) }
   );
+
+  // ─── Notifications on status change ───
+  if (data.status && data.status !== existing.status) {
+    const modelName = updated.model.stageName;
+    const descShort = truncate(existing.description);
+
+    // Récupérer le userId du chatter qui a créé le custom
+    const chatterUser = updated.createdBy.user;
+
+    if (data.status === "IN_PROGRESS") {
+      await createNotification({
+        userId: chatterUser.id,
+        type: "CUSTOM_IN_PROGRESS",
+        title: "Custom en cours",
+        message: `${modelName} a commencé à travailler sur le custom — ${descShort}`,
+        link: `/chatter/customs/${params.id}`,
+      });
+      await notifyAdmins({
+        type: "CUSTOM_IN_PROGRESS",
+        title: "Custom en cours",
+        message: `${modelName} a commencé à travailler sur le custom — ${descShort}`,
+        link: `/admin/customs/${params.id}`,
+      });
+    } else if (data.status === "COMPLETED") {
+      await createNotification({
+        userId: chatterUser.id,
+        type: "CUSTOM_COMPLETED",
+        title: "Custom terminé",
+        message: `${modelName} a terminé le custom — ${descShort}. Prêt à envoyer !`,
+        link: `/chatter/customs/${params.id}`,
+      });
+      await notifyAdmins({
+        type: "CUSTOM_COMPLETED",
+        title: "Custom terminé",
+        message: `${modelName} a terminé le custom — ${descShort}. Prêt à envoyer !`,
+        link: `/admin/customs/${params.id}`,
+      });
+    }
+  }
 
   return jsonSuccess(updated);
 }
