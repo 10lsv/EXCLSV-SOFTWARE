@@ -27,6 +27,7 @@ interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
+  badge?: "notif" | "messages";
 }
 
 const navByRole: Record<Role, NavItem[]> = {
@@ -34,6 +35,7 @@ const navByRole: Record<Role, NavItem[]> = {
     { label: "Tableau de bord", href: "/admin/dashboard", icon: LayoutDashboard },
     { label: "Modèles", href: "/admin/models", icon: Users },
     { label: "Customs", href: "/admin/customs", icon: FileText },
+    { label: "Messages", href: "/admin/messages", icon: MessageSquare, badge: "messages" },
     { label: "Scripts", href: "/admin/scripts", icon: ClipboardList },
     { label: "Planning", href: "/admin/planning", icon: Calendar },
     { label: "Finance", href: "/admin/finance", icon: DollarSign },
@@ -41,70 +43,89 @@ const navByRole: Record<Role, NavItem[]> = {
     { label: "Réseaux sociaux", href: "/admin/social", icon: Share2 },
     { label: "Onboarding", href: "/admin/onboarding", icon: ClipboardList },
     { label: "Paramètres", href: "/admin/settings", icon: Settings },
-    { label: "Notifications", href: "/admin/notifications", icon: Bell },
+    { label: "Notifications", href: "/admin/notifications", icon: Bell, badge: "notif" },
   ],
   ADMIN: [
     { label: "Tableau de bord", href: "/admin/dashboard", icon: LayoutDashboard },
     { label: "Modèles", href: "/admin/models", icon: Users },
     { label: "Customs", href: "/admin/customs", icon: FileText },
+    { label: "Messages", href: "/admin/messages", icon: MessageSquare, badge: "messages" },
     { label: "Scripts", href: "/admin/scripts", icon: ClipboardList },
     { label: "Planning", href: "/admin/planning", icon: Calendar },
     { label: "Finance", href: "/admin/finance", icon: DollarSign },
     { label: "Contenu", href: "/admin/content", icon: Film },
     { label: "Réseaux sociaux", href: "/admin/social", icon: Share2 },
     { label: "Onboarding", href: "/admin/onboarding", icon: ClipboardList },
-    { label: "Notifications", href: "/admin/notifications", icon: Bell },
+    { label: "Notifications", href: "/admin/notifications", icon: Bell, badge: "notif" },
   ],
   CHATTER_MANAGER: [
     { label: "Tableau de bord", href: "/chatter-manager/dashboard", icon: LayoutDashboard },
     { label: "Customs", href: "/chatter-manager/customs", icon: FileText },
+    { label: "Messages", href: "/chatter-manager/messages", icon: MessageSquare, badge: "messages" },
     { label: "Planning", href: "/chatter-manager/planning", icon: Calendar },
-    { label: "Notifications", href: "/chatter-manager/notifications", icon: Bell },
+    { label: "Notifications", href: "/chatter-manager/notifications", icon: Bell, badge: "notif" },
   ],
   CHATTER: [
     { label: "Tableau de bord", href: "/chatter/dashboard", icon: LayoutDashboard },
-    { label: "Customs", href: "/chatter/customs", icon: MessageSquare },
+    { label: "Customs", href: "/chatter/customs", icon: FileText },
+    { label: "Messages", href: "/chatter/messages", icon: MessageSquare, badge: "messages" },
     { label: "Planning", href: "/chatter/planning", icon: Clock },
-    { label: "Notifications", href: "/chatter/notifications", icon: Bell },
+    { label: "Notifications", href: "/chatter/notifications", icon: Bell, badge: "notif" },
   ],
   MODEL: [
     { label: "Tableau de bord", href: "/model/dashboard", icon: LayoutDashboard },
     { label: "Customs", href: "/model/customs", icon: FileText },
+    { label: "Messages", href: "/model/messages", icon: MessageSquare, badge: "messages" },
     { label: "Contenu", href: "/model/content", icon: Film },
     { label: "Factures", href: "/model/invoices", icon: Receipt },
     { label: "Mon Profil", href: "/model/profile", icon: User },
-    { label: "Notifications", href: "/model/notifications", icon: Bell },
+    { label: "Notifications", href: "/model/notifications", icon: Bell, badge: "notif" },
   ],
 };
 
 export function SidebarNav({ role }: { role: Role }) {
   const pathname = usePathname();
   const items = navByRole[role] || [];
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifCount, setNotifCount] = useState(0);
+  const [msgCount, setMsgCount] = useState(0);
 
-  const pollCount = useCallback(async () => {
+  const poll = useCallback(async () => {
     if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
     try {
-      const res = await fetch("/api/notifications?countOnly=true");
-      if (!res.ok) return;
-      const json = await res.json();
-      if (json.success) setUnreadCount(json.data.count);
+      const [notifRes, msgRes] = await Promise.all([
+        fetch("/api/notifications?countOnly=true"),
+        fetch("/api/messages/unread-count"),
+      ]);
+      if (notifRes.ok) {
+        const j = await notifRes.json();
+        if (j.success) setNotifCount(j.data.count);
+      }
+      if (msgRes.ok) {
+        const j = await msgRes.json();
+        if (j.success) setMsgCount(j.data.count);
+      }
     } catch {
       // ignore
     }
   }, []);
 
   useEffect(() => {
-    pollCount();
-    const interval = setInterval(pollCount, 10000);
+    poll();
+    const interval = setInterval(poll, 10000);
     return () => clearInterval(interval);
-  }, [pollCount]);
+  }, [poll]);
+
+  function getBadgeCount(badge?: "notif" | "messages") {
+    if (badge === "notif") return notifCount;
+    if (badge === "messages") return msgCount;
+    return 0;
+  }
 
   return (
     <nav className="flex flex-col gap-0.5 px-3 py-2">
       {items.map((item) => {
         const isActive = pathname.startsWith(item.href);
-        const isNotif = item.label === "Notifications";
+        const count = getBadgeCount(item.badge);
         return (
           <Link
             key={item.href}
@@ -118,9 +139,12 @@ export function SidebarNav({ role }: { role: Role }) {
           >
             <item.icon className="h-4 w-4" />
             {item.label}
-            {isNotif && unreadCount > 0 && (
-              <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
-                {unreadCount > 99 ? "99+" : unreadCount}
+            {item.badge && count > 0 && (
+              <span className={cn(
+                "ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white",
+                item.badge === "messages" ? "bg-primary" : "bg-red-500"
+              )}>
+                {count > 99 ? "99+" : count}
               </span>
             )}
           </Link>

@@ -191,6 +191,7 @@ model CustomMessage {
   custom    CustomContent @relation(fields: [customId], references: [id])
   senderId  String
   content   String
+  readBy    String[]
   createdAt DateTime      @default(now())
 }
 
