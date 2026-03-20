@@ -22,6 +22,7 @@ import { ExternalLink, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { CustomStatus } from "@prisma/client";
+import { cn } from "@/lib/utils";
 import type { CustomDetail as CustomDetailType } from "@/types/custom.types";
 
 interface CustomDetailProps {
@@ -55,6 +56,9 @@ export function CustomDetailView({
   const [driveLinkValue, setDriveLinkValue] = useState(custom.driveLink || "");
   const [driveSaving, setDriveSaving] = useState(false);
 
+  const remaining = custom.totalPrice - custom.amountCollected;
+  const isPaid = remaining <= 0;
+
   async function handleStatusChange(value: string) {
     setStatusSaving(true);
     await onStatusChange(value as CustomStatus);
@@ -69,7 +73,7 @@ export function CustomDetailView({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header — Modèle + Statut + Badges */}
       <Card>
         <CardContent className="p-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -101,90 +105,157 @@ export function CustomDetailView({
               </div>
             </div>
 
-            <div className="flex flex-col items-end gap-2">
-              <div className="text-2xl font-bold">
-                {custom.totalPrice.toFixed(0)}$
+            {/* Actions */}
+            {(permissions.canEdit || permissions.canDelete) && (
+              <div className="flex gap-2">
+                {permissions.canEdit && onEdit && (
+                  <Button variant="outline" size="sm" onClick={onEdit}>
+                    Modifier
+                  </Button>
+                )}
+                {permissions.canDelete && onDelete && (
+                  <Button variant="destructive" size="sm" onClick={onDelete}>
+                    Supprimer
+                  </Button>
+                )}
               </div>
-              {custom.amountCollected > 0 && (
-                <span className="text-sm text-muted-foreground">
-                  {custom.amountCollected.toFixed(0)}$ collecté
-                </span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Reste à payer */}
+      <Card
+        className={cn(
+          "border-l-4",
+          isPaid
+            ? "border-l-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/10"
+            : "border-l-orange-500 bg-orange-50/30 dark:bg-orange-950/10"
+        )}
+      >
+        <CardContent className="flex flex-col gap-2 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Reste à payer
+            </p>
+            <p
+              className={cn(
+                "text-3xl font-bold",
+                isPaid ? "text-emerald-600" : "text-orange-600"
               )}
+            >
+              {isPaid ? "0" : remaining.toFixed(0)}$
+            </p>
+          </div>
+          <div className="flex gap-6">
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Prix total</p>
+              <p className="text-lg font-semibold">
+                {custom.totalPrice.toFixed(0)}$
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Collecté</p>
+              <p className="text-lg font-semibold">
+                {custom.amountCollected.toFixed(0)}$
+              </p>
             </div>
           </div>
         </CardContent>
       </Card>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Info */}
+        {/* Détails */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Détails</CardTitle>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base">Détails du custom</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-5">
+            {/* Description — pleine largeur */}
             <div>
-              <Label className="text-muted-foreground">Description</Label>
-              <p className="mt-1 text-sm whitespace-pre-wrap">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Description
+              </p>
+              <p className="mt-1.5 text-sm whitespace-pre-wrap">
                 {custom.description}
               </p>
             </div>
 
+            <Separator />
+
+            {/* Type de contenu */}
             <div>
-              <Label className="text-muted-foreground">Type de contenu</Label>
-              <div className="mt-1">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Type de contenu
+              </p>
+              <div className="mt-1.5">
                 <ContentTypeDisplay types={custom.contentType} />
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            {/* Grille 2 colonnes */}
+            <div className="grid gap-4 grid-cols-2">
               <div>
-                <Label className="text-muted-foreground">Durée</Label>
-                <p className="mt-1 text-sm">{custom.duration || "—"}</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Durée
+                </p>
+                <p className="mt-1 text-sm font-medium">
+                  {custom.duration || "—"}
+                </p>
               </div>
               <div>
-                <Label className="text-muted-foreground">Tenue / accessoires</Label>
-                <p className="mt-1 text-sm">{custom.outfit || "—"}</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Tenue
+                </p>
+                <p className="mt-1 text-sm font-medium">
+                  {custom.outfit || "—"}
+                </p>
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <Separator />
+
+            <div className="grid gap-4 grid-cols-2">
               <div>
-                <Label className="text-muted-foreground">@ du client</Label>
-                <p className="mt-1 text-sm">{custom.clientHandle || "—"}</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  @ du client
+                </p>
+                <p className="mt-1 text-sm font-medium">
+                  {custom.clientHandle || "—"}
+                </p>
               </div>
               <div>
-                <Label className="text-muted-foreground">Catégorie client</Label>
-                <div className="mt-1">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Catégorie client
+                </p>
+                <div className="mt-1.5">
                   <ClientCategoryBadge category={custom.clientCategory} />
                 </div>
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <Label className="text-muted-foreground">Prix total</Label>
-                <p className="mt-1 text-sm font-semibold">{custom.totalPrice.toFixed(0)}$</p>
-              </div>
-              <div>
-                <Label className="text-muted-foreground">Montant collecté</Label>
-                <p className="mt-1 text-sm">{custom.amountCollected.toFixed(0)}$</p>
-              </div>
-            </div>
-
+            {/* Notes */}
             {custom.notes && (
-              <div>
-                <Label className="text-muted-foreground">Notes</Label>
-                <p className="mt-1 text-sm whitespace-pre-wrap">
-                  {custom.notes}
-                </p>
-              </div>
+              <>
+                <Separator />
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    Notes
+                  </p>
+                  <p className="mt-1.5 text-sm whitespace-pre-wrap">
+                    {custom.notes}
+                  </p>
+                </div>
+              </>
             )}
 
             <Separator />
 
             {/* Drive Link */}
-            <div className="space-y-2">
-              <Label>Lien Google Drive</Label>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
+                Lien Google Drive
+              </p>
               {permissions.canEditDriveLink ? (
                 <div className="flex gap-2">
                   <Input
@@ -224,45 +295,31 @@ export function CustomDetailView({
 
             {/* Status change */}
             {permissions.canChangeStatus && (
-              <div className="space-y-2">
-                <Label>Changer le statut</Label>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={custom.status}
-                    onValueChange={handleStatusChange}
-                    disabled={statusSaving}
-                  >
-                    <SelectTrigger className="w-[200px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="NOT_STARTED">Non commencé</SelectItem>
-                      <SelectItem value="IN_PROGRESS">En cours</SelectItem>
-                      <SelectItem value="COMPLETED">Terminé</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {statusSaving && (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Actions */}
-            {(permissions.canEdit || permissions.canDelete) && (
               <>
                 <Separator />
-                <div className="flex gap-2">
-                  {permissions.canEdit && onEdit && (
-                    <Button variant="outline" onClick={onEdit}>
-                      Modifier
-                    </Button>
-                  )}
-                  {permissions.canDelete && onDelete && (
-                    <Button variant="destructive" onClick={onDelete}>
-                      Supprimer
-                    </Button>
-                  )}
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
+                    Changer le statut
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={custom.status}
+                      onValueChange={handleStatusChange}
+                      disabled={statusSaving}
+                    >
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NOT_STARTED">Non commencé</SelectItem>
+                        <SelectItem value="IN_PROGRESS">En cours</SelectItem>
+                        <SelectItem value="COMPLETED">Terminé</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {statusSaving && (
+                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    )}
+                  </div>
                 </div>
               </>
             )}

@@ -1,18 +1,36 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Progress } from "@/components/ui/progress";
 import { CustomFiltersBar } from "@/components/customs/custom-filters";
 import { CustomCard } from "@/components/customs/custom-card";
 import { CustomForm } from "@/components/customs/custom-form";
-import { Plus, FileText } from "lucide-react";
+import {
+  Plus,
+  FileText,
+  TrendingUp,
+  Clock,
+  CheckCircle2,
+  DollarSign,
+  AlertTriangle,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 import type {
   CustomListItem,
   CustomFilters,
@@ -20,6 +38,19 @@ import type {
   ChatterOption,
 } from "@/types/custom.types";
 import type { CreateCustomInput } from "@/lib/validations/custom";
+
+interface Stats {
+  customsThisWeek: number;
+  revenueThisMonth: number;
+  avgProductionHours: number | null;
+  completionRate: number;
+  completedThisMonth: number;
+  totalThisMonth: number;
+  remainingToCollect: number;
+}
+
+type GroupBy = "none" | "chatter" | "model";
+type SortBy = "recent" | "oldest" | "price_desc" | "price_asc";
 
 export default function AdminCustomsPage() {
   const router = useRouter();
@@ -32,15 +63,20 @@ export default function AdminCustomsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [groupBy, setGroupBy] = useState<GroupBy>("none");
+  const [sortBy, setSortBy] = useState<SortBy>("recent");
 
   const fetchCustoms = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
+    params.set("limit", "200");
     if (filters.search) params.set("search", filters.search);
     if (filters.status) params.set("status", filters.status);
     if (filters.modelId) params.set("modelId", filters.modelId);
     if (filters.contentType) params.set("contentType", filters.contentType);
-    if (filters.clientCategory) params.set("clientCategory", filters.clientCategory);
+    if (filters.clientCategory)
+      params.set("clientCategory", filters.clientCategory);
 
     const res = await fetch(`/api/customs?${params}`);
     const json = await res.json();
@@ -50,6 +86,17 @@ export default function AdminCustomsPage() {
     }
     setLoading(false);
   }, [filters]);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await fetch("/api/customs/stats");
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.success) setStats(json.data);
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const fetchModels = useCallback(async () => {
     const res = await fetch("/api/models?limit=100");
@@ -75,7 +122,8 @@ export default function AdminCustomsPage() {
   useEffect(() => {
     fetchModels();
     fetchChatters();
-  }, [fetchModels, fetchChatters]);
+    fetchStats();
+  }, [fetchModels, fetchChatters, fetchStats]);
 
   useEffect(() => {
     const timeout = setTimeout(fetchCustoms, 300);
@@ -99,10 +147,77 @@ export default function AdminCustomsPage() {
     setCreateOpen(false);
     setCreateLoading(false);
     fetchCustoms();
+    fetchStats();
+  }
+
+  // Tri
+  const sortedCustoms = useMemo(() => {
+    const sorted = [...customs];
+    switch (sortBy) {
+      case "oldest":
+        sorted.sort(
+          (a, b) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+        break;
+      case "price_desc":
+        sorted.sort((a, b) => b.totalPrice - a.totalPrice);
+        break;
+      case "price_asc":
+        sorted.sort((a, b) => a.totalPrice - b.totalPrice);
+        break;
+      default:
+        sorted.sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+    }
+    return sorted;
+  }, [customs, sortBy]);
+
+  // Groupement
+  const groups = useMemo(() => {
+    if (groupBy === "none") return null;
+
+    const map = new Map<
+      string,
+      { label: string; customs: CustomListItem[]; revenue: number }
+    >();
+
+    for (const c of sortedCustoms) {
+      let key: string;
+      let label: string;
+      if (groupBy === "chatter") {
+        key = c.createdBy.id;
+        label = c.createdBy.user.name;
+      } else {
+        key = c.model.id;
+        label = c.model.stageName;
+      }
+
+      if (!map.has(key)) {
+        map.set(key, { label, customs: [], revenue: 0 });
+      }
+      const group = map.get(key)!;
+      group.customs.push(c);
+      group.revenue += c.totalPrice;
+    }
+
+    return Array.from(map.values()).sort(
+      (a, b) => b.customs.length - a.customs.length
+    );
+  }, [sortedCustoms, groupBy]);
+
+  function formatAvgTime(hours: number | null) {
+    if (hours === null) return "—";
+    if (hours < 24) return `${hours}h`;
+    const days = Math.round(hours / 24);
+    return `${days}j`;
   }
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Customs</h1>
@@ -116,12 +231,130 @@ export default function AdminCustomsPage() {
         </Button>
       </div>
 
+      {/* KPI Cards */}
+      {stats && (
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <FileText className="h-4 w-4" />
+                <span className="text-xs font-medium uppercase tracking-wider">
+                  Cette semaine
+                </span>
+              </div>
+              <p className="text-2xl font-bold">{stats.customsThisWeek}</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <TrendingUp className="h-4 w-4" />
+                <span className="text-xs font-medium uppercase tracking-wider">
+                  Revenus du mois
+                </span>
+              </div>
+              <p className="text-2xl font-bold">
+                {stats.revenueThisMonth.toFixed(0)}$
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <Clock className="h-4 w-4" />
+                <span className="text-xs font-medium uppercase tracking-wider">
+                  Temps moyen
+                </span>
+              </div>
+              <p className="text-2xl font-bold">
+                {formatAvgTime(stats.avgProductionHours)}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <CheckCircle2 className="h-4 w-4" />
+                <span className="text-xs font-medium uppercase tracking-wider">
+                  Complétion
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <p className="text-2xl font-bold">{stats.completionRate}%</p>
+                <span className="text-xs text-muted-foreground">
+                  {stats.completedThisMonth}/{stats.totalThisMonth}
+                </span>
+              </div>
+              <Progress value={stats.completionRate} className="mt-2 h-1.5" />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                <DollarSign className="h-4 w-4" />
+                <span className="text-xs font-medium uppercase tracking-wider">
+                  À collecter
+                </span>
+              </div>
+              <p
+                className={cn(
+                  "text-2xl font-bold",
+                  stats.remainingToCollect > 0
+                    ? "text-red-600"
+                    : "text-emerald-600"
+                )}
+              >
+                {stats.remainingToCollect.toFixed(0)}$
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Filtres */}
       <CustomFiltersBar
         filters={filters}
         onFiltersChange={setFilters}
         models={models}
       />
 
+      {/* Tri & Groupement */}
+      <div className="flex flex-wrap items-center gap-3">
+        <Select
+          value={sortBy}
+          onValueChange={(v) => setSortBy(v as SortBy)}
+        >
+          <SelectTrigger className="w-[200px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="recent">Plus récent d&apos;abord</SelectItem>
+            <SelectItem value="oldest">Plus ancien d&apos;abord</SelectItem>
+            <SelectItem value="price_desc">Prix décroissant</SelectItem>
+            <SelectItem value="price_asc">Prix croissant</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select
+          value={groupBy}
+          onValueChange={(v) => setGroupBy(v as GroupBy)}
+        >
+          <SelectTrigger className="w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Aucun groupement</SelectItem>
+            <SelectItem value="chatter">Par chatter</SelectItem>
+            <SelectItem value="model">Par modèle</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Liste */}
       {loading ? (
         <div className="flex items-center justify-center py-12 text-muted-foreground">
           Chargement...
@@ -129,7 +362,9 @@ export default function AdminCustomsPage() {
       ) : customs.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16">
           <FileText className="mb-4 h-12 w-12 text-muted-foreground/50" />
-          <h3 className="text-lg font-medium">Aucun custom pour le moment</h3>
+          <h3 className="text-lg font-medium">
+            Aucun custom pour le moment
+          </h3>
           <p className="mb-4 text-sm text-muted-foreground">
             Créez votre premier custom content
           </p>
@@ -138,9 +373,42 @@ export default function AdminCustomsPage() {
             Nouveau custom
           </Button>
         </div>
+      ) : groups ? (
+        // Affichage groupé
+        <div className="space-y-6">
+          {groups.map((group) => (
+            <div key={group.label} className="space-y-2">
+              <div className="flex items-center justify-between border-b pb-2">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold">{group.label}</h3>
+                  <span className="text-xs text-muted-foreground">
+                    {group.customs.length} custom
+                    {group.customs.length > 1 ? "s" : ""}
+                  </span>
+                </div>
+                <span className="text-sm font-medium">
+                  {group.revenue.toFixed(0)}$
+                </span>
+              </div>
+              <div className="grid gap-2">
+                {group.customs.map((custom) => (
+                  <CustomCard
+                    key={custom.id}
+                    custom={custom}
+                    onClick={() =>
+                      router.push(`/admin/customs/${custom.id}`)
+                    }
+                    showModel={groupBy !== "model"}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
+        // Affichage normal
         <div className="grid gap-3">
-          {customs.map((custom) => (
+          {sortedCustoms.map((custom) => (
             <CustomCard
               key={custom.id}
               custom={custom}

@@ -62,7 +62,6 @@ export function CustomForm({
     resolver: zodResolver(createCustomSchema) as any,
     defaultValues: {
       contentType: [],
-      amountCollected: 0,
       ...defaultValues,
     },
   });
@@ -234,7 +233,9 @@ export function CustomForm({
             type="number"
             step="0.01"
             min="0"
-            {...register("totalPrice", { valueAsNumber: true })}
+            {...register("totalPrice", {
+              setValueAs: (v: string) => (v === "" ? 0 : parseFloat(v)),
+            })}
             placeholder="0"
           />
           {errors.totalPrice && (
@@ -249,7 +250,9 @@ export function CustomForm({
             type="number"
             step="0.01"
             min="0"
-            {...register("amountCollected", { valueAsNumber: true })}
+            {...register("amountCollected", {
+              setValueAs: (v: string) => (v === "" ? 0 : parseFloat(v)),
+            })}
             placeholder="0"
           />
         </div>

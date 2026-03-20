@@ -210,6 +210,91 @@ async function main() {
     console.log("Chatter notifications created.");
   }
 
+  // ── Weekly Content Templates ──
+  // Pour chaque modèle, créer les templates si aucun n'existe
+  const allModelProfiles = await prisma.modelProfile.findMany({ select: { id: true, stageName: true } });
+
+  for (const mp of allModelProfiles) {
+    const existingTemplates = await prisma.weeklyContentTemplate.count({ where: { modelId: mp.id } });
+    if (existingTemplates > 0) {
+      console.log(`Templates already exist for ${mp.stageName}, skipping.`);
+      continue;
+    }
+
+    const templateData = [
+      // OnlyFans
+      { category: "Lingerie/Sexy outfit Pictures", platform: "OnlyFans", quantity: 5, sortOrder: 0 },
+      { category: "Lingerie/Sexy outfit Videos", platform: "OnlyFans", quantity: 5, sortOrder: 1 },
+      { category: "Script Content", platform: "OnlyFans", quantity: 1, sortOrder: 2 },
+      { category: "Teasers No Nude", platform: "OnlyFans", quantity: 2, sortOrder: 3 },
+      { category: "Feed Content", platform: "OnlyFans", quantity: 7, sortOrder: 4 },
+      { category: "Nude Pictures PPV", platform: "OnlyFans", quantity: 7, sortOrder: 5 },
+      { category: "Nude Videos PPV", platform: "OnlyFans", quantity: 7, sortOrder: 6 },
+      // Instagram
+      { category: "Posts", platform: "Instagram", quantity: 1, sortOrder: 0 },
+      { category: "Stories", platform: "Instagram", quantity: 7, sortOrder: 1 },
+      { category: "Reels", platform: "Instagram", quantity: 7, sortOrder: 2 },
+      // TikTok
+      { category: "TikToks", platform: "TikTok", quantity: 14, sortOrder: 0 },
+    ];
+
+    await prisma.weeklyContentTemplate.createMany({
+      data: templateData.map((t) => ({ modelId: mp.id, ...t })),
+    });
+    console.log(`Templates created for ${mp.stageName} (${templateData.length} categories).`);
+
+    // Générer tâches pour semaine en cours et semaine précédente
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const thisMonday = new Date(now);
+    thisMonday.setDate(now.getDate() + mondayOffset);
+    thisMonday.setHours(0, 0, 0, 0);
+    const lastMonday = new Date(thisMonday);
+    lastMonday.setDate(thisMonday.getDate() - 7);
+
+    const templates = await prisma.weeklyContentTemplate.findMany({
+      where: { modelId: mp.id, isActive: true },
+    });
+
+    for (const weekStart of [lastMonday, thisMonday]) {
+      const isLastWeek = weekStart === lastMonday;
+      const existingTasks = await prisma.weeklyContentTask.count({
+        where: { modelId: mp.id, weekStart },
+      });
+      if (existingTasks > 0) continue;
+
+      await prisma.weeklyContentTask.createMany({
+        data: templates.map((t) => {
+          // Semaine passée : progression variée | Semaine en cours : début de progression
+          const completedQuantity = isLastWeek
+            ? Math.floor(t.quantity * (0.4 + Math.random() * 0.6)) // 40-100%
+            : Math.floor(t.quantity * Math.random() * 0.4);         // 0-40%
+          const status =
+            completedQuantity === 0
+              ? "NOT_STARTED"
+              : completedQuantity >= t.quantity
+                ? "COMPLETED"
+                : "IN_PROGRESS";
+          return {
+            modelId: mp.id,
+            templateId: t.id,
+            weekStart,
+            category: t.category,
+            platform: t.platform,
+            targetQuantity: t.quantity,
+            completedQuantity,
+            status: status as "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED",
+            driveLink: t.driveLink,
+          };
+        }),
+      });
+      console.log(
+        `Tasks generated for ${mp.stageName} - week of ${weekStart.toISOString().split("T")[0]}`
+      );
+    }
+  }
+
   console.log("Seed completed.");
 }
 
