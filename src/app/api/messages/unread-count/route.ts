@@ -14,7 +14,6 @@ export async function GET(_req: NextRequest) {
   const userId = session!.user.id;
 
   const conditions: Prisma.CustomContentWhereInput[] = [
-    { status: { in: ["NOT_STARTED", "IN_PROGRESS"] } },
     { messages: { some: {} } },
   ];
 
