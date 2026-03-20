@@ -1,8 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonSuccess, jsonError } from "@/lib/api-utils";
-import { getMondayUTC } from "@/lib/utils";
-
 // POST /api/cron/generate-weekly-content — génération automatique chaque lundi
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -12,7 +10,13 @@ export async function POST(req: NextRequest) {
     return jsonError("Non autorisé", 401);
   }
 
-  const monday = getMondayUTC();
+  const now = new Date();
+  const day = now.getUTCDay();
+  const diff = day === 0 ? 6 : day - 1;
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff));
+  const nextMonday = new Date(monday);
+  nextMonday.setUTCDate(monday.getUTCDate() + 7);
+
   let totalCreated = 0;
   let modelsProcessed = 0;
 
@@ -21,9 +25,8 @@ export async function POST(req: NextRequest) {
   });
 
   for (const model of models) {
-    // Vérifier si les tasks existent déjà pour cette semaine
     const existing = await prisma.weeklyContentTask.count({
-      where: { modelId: model.id, weekStart: monday },
+      where: { modelId: model.id, weekStart: { gte: monday, lt: nextMonday } },
     });
 
     if (existing > 0) continue;

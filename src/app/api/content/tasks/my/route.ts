@@ -2,7 +2,17 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { jsonSuccess, jsonError, requireRole } from "@/lib/api-utils";
-import { getMondayUTC } from "@/lib/utils";
+
+function getWeekRange(date: Date = new Date()) {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const day = d.getUTCDay();
+  const diff = day === 0 ? 6 : day - 1;
+  const monday = new Date(d);
+  monday.setUTCDate(d.getUTCDate() - diff);
+  const nextMonday = new Date(monday);
+  nextMonday.setUTCDate(monday.getUTCDate() + 7);
+  return { monday, nextMonday };
+}
 
 // GET /api/content/tasks/my — tâches de la semaine en cours pour la modèle connectée
 export async function GET(req: NextRequest) {
@@ -16,10 +26,13 @@ export async function GET(req: NextRequest) {
 
   if (!modelProfile) return jsonError("Profil modèle introuvable", 404);
 
-  const monday = getMondayUTC();
+  const { monday, nextMonday } = getWeekRange();
 
   let tasks = await prisma.weeklyContentTask.findMany({
-    where: { modelId: modelProfile.id, weekStart: monday },
+    where: {
+      modelId: modelProfile.id,
+      weekStart: { gte: monday, lt: nextMonday },
+    },
     orderBy: [{ platform: "asc" }, { category: "asc" }],
   });
 
@@ -46,7 +59,10 @@ export async function GET(req: NextRequest) {
       });
 
       tasks = await prisma.weeklyContentTask.findMany({
-        where: { modelId: modelProfile.id, weekStart: monday },
+        where: {
+          modelId: modelProfile.id,
+          weekStart: { gte: monday, lt: nextMonday },
+        },
         orderBy: [{ platform: "asc" }, { category: "asc" }],
       });
     }

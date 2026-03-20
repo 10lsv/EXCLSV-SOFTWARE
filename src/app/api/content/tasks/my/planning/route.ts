@@ -2,7 +2,17 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { jsonSuccess, jsonError, requireRole } from "@/lib/api-utils";
-import { getMondayUTC } from "@/lib/utils";
+
+function getWeekRange(date: Date = new Date()) {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const day = d.getUTCDay();
+  const diff = day === 0 ? 6 : day - 1;
+  const monday = new Date(d);
+  monday.setUTCDate(d.getUTCDate() - diff);
+  const nextMonday = new Date(monday);
+  nextMonday.setUTCDate(monday.getUTCDate() + 7);
+  return { monday, nextMonday };
+}
 
 // GET /api/content/tasks/my/planning — tâches + entrées de planning pour la semaine
 export async function GET(req: NextRequest) {
@@ -19,18 +29,26 @@ export async function GET(req: NextRequest) {
   // Semaine demandée ou semaine courante
   const weekStartParam = req.nextUrl.searchParams.get("weekStart");
   let monday: Date;
+  let nextMonday: Date;
 
   if (weekStartParam) {
-    monday = getMondayUTC(new Date(weekStartParam));
+    const range = getWeekRange(new Date(weekStartParam));
+    monday = range.monday;
+    nextMonday = range.nextMonday;
   } else {
-    monday = getMondayUTC();
+    const range = getWeekRange();
+    monday = range.monday;
+    nextMonday = range.nextMonday;
   }
 
   const sunday = new Date(monday);
   sunday.setUTCDate(monday.getUTCDate() + 6);
 
   let tasks = await prisma.weeklyContentTask.findMany({
-    where: { modelId: modelProfile.id, weekStart: monday },
+    where: {
+      modelId: modelProfile.id,
+      weekStart: { gte: monday, lt: nextMonday },
+    },
     include: {
       planEntries: {
         where: {
@@ -65,7 +83,10 @@ export async function GET(req: NextRequest) {
       });
 
       tasks = await prisma.weeklyContentTask.findMany({
-        where: { modelId: modelProfile.id, weekStart: monday },
+        where: {
+          modelId: modelProfile.id,
+          weekStart: { gte: monday, lt: nextMonday },
+        },
         include: {
           planEntries: {
             where: {
