@@ -12,10 +12,26 @@ import { fr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import type { CustomListItem } from "@/types/custom.types";
 
+const statusStyles: Record<string, { border: string; bg: string }> = {
+  NOT_STARTED: {
+    border: "border-l-red-400",
+    bg: "bg-red-50/30 dark:bg-red-950/5",
+  },
+  IN_PROGRESS: {
+    border: "border-l-amber-400",
+    bg: "bg-amber-50/30 dark:bg-amber-950/5",
+  },
+  COMPLETED: {
+    border: "border-l-emerald-400",
+    bg: "bg-emerald-50/20 dark:bg-emerald-950/5",
+  },
+};
+
 interface CustomCardProps {
   custom: CustomListItem;
   onClick: () => void;
   showModel?: boolean;
+  dimCompleted?: boolean;
 }
 
 function isLate(custom: CustomListItem): boolean {
@@ -25,14 +41,23 @@ function isLate(custom: CustomListItem): boolean {
   return now - created > 48 * 60 * 60 * 1000; // 48h
 }
 
-export function CustomCard({ custom, onClick, showModel = true }: CustomCardProps) {
+export function CustomCard({
+  custom,
+  onClick,
+  showModel = true,
+  dimCompleted = false,
+}: CustomCardProps) {
   const late = isLate(custom);
+  const style = statusStyles[custom.status] || statusStyles.NOT_STARTED;
+  const isCompleted = custom.status === "COMPLETED";
 
   return (
     <Card
       className={cn(
-        "cursor-pointer transition-colors hover:bg-muted/50",
-        late && "border-l-4 border-l-red-500"
+        "cursor-pointer border-l-4 transition-colors hover:bg-muted/50",
+        style.border,
+        style.bg,
+        dimCompleted && isCompleted && "opacity-60"
       )}
       onClick={onClick}
     >
@@ -58,7 +83,14 @@ export function CustomCard({ custom, onClick, showModel = true }: CustomCardProp
               </div>
             )}
 
-            <p className="text-sm line-clamp-2">{custom.description}</p>
+            <p
+              className={cn(
+                "text-sm line-clamp-2",
+                dimCompleted && isCompleted && "line-through text-muted-foreground"
+              )}
+            >
+              {custom.description}
+            </p>
 
             <ContentTypeDisplay types={custom.contentType} />
 
@@ -66,7 +98,10 @@ export function CustomCard({ custom, onClick, showModel = true }: CustomCardProp
               <StatusBadge status={custom.status} />
               <ClientCategoryBadge category={custom.clientCategory} />
               {late && (
-                <Badge variant="destructive" className="gap-1 text-[10px] px-1.5 py-0">
+                <Badge
+                  variant="destructive"
+                  className="gap-1 text-[10px] px-1.5 py-0"
+                >
                   <AlertTriangle className="h-3 w-3" />
                   En retard
                 </Badge>
@@ -89,7 +124,9 @@ export function CustomCard({ custom, onClick, showModel = true }: CustomCardProp
               {custom._count.messages}
             </div>
             <span className="text-xs text-muted-foreground">
-              {format(new Date(custom.createdAt), "d MMM yyyy 'à' HH:mm", { locale: fr })}
+              {format(new Date(custom.createdAt), "d MMM yyyy 'à' HH:mm", {
+                locale: fr,
+              })}
             </span>
           </div>
         </div>

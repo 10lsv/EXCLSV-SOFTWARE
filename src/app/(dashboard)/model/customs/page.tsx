@@ -74,22 +74,23 @@ export default function ModelCustomsPage() {
 
   const weekLabel = `Semaine du ${format(weekStart, "d MMM", { locale: fr })} au ${format(weekEnd, "d MMM yyyy", { locale: fr })}`;
 
+  const statusOrder: Record<string, number> = { NOT_STARTED: 0, IN_PROGRESS: 1, COMPLETED: 2 };
+
   const sortedCustoms = useMemo(() => {
     const sorted = [...customs];
-    switch (sortBy) {
-      case "oldest":
-        sorted.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        break;
-      case "newest":
-        sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        break;
-      case "price_desc":
-        sorted.sort((a, b) => b.totalPrice - a.totalPrice);
-        break;
-      case "price_asc":
-        sorted.sort((a, b) => a.totalPrice - b.totalPrice);
-        break;
-    }
+    const secondarySort = (a: CustomListItem, b: CustomListItem) => {
+      switch (sortBy) {
+        case "oldest": return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        case "newest": return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        case "price_desc": return b.totalPrice - a.totalPrice;
+        case "price_asc": return a.totalPrice - b.totalPrice;
+        default: return 0;
+      }
+    };
+    sorted.sort((a, b) => {
+      const sd = (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
+      return sd !== 0 ? sd : secondarySort(a, b);
+    });
     return sorted;
   }, [customs, sortBy]);
 
@@ -196,18 +197,28 @@ export default function ModelCustomsPage() {
             Vos customs apparaîtront ici
           </p>
         </div>
-      ) : (
-        <div className="grid gap-3">
-          {sortedCustoms.map((custom) => (
-            <CustomCard
-              key={custom.id}
-              custom={custom}
-              onClick={() => router.push(`/model/customs/${custom.id}`)}
-              showModel={false}
-            />
-          ))}
-        </div>
-      )}
+      ) : (() => {
+        const active = sortedCustoms.filter((c) => c.status !== "COMPLETED");
+        const completed = sortedCustoms.filter((c) => c.status === "COMPLETED");
+
+        return (
+          <div className="grid gap-3">
+            {active.map((custom) => (
+              <CustomCard key={custom.id} custom={custom} onClick={() => router.push(`/model/customs/${custom.id}`)} showModel={false} />
+            ))}
+            {completed.length > 0 && active.length > 0 && (
+              <div className="flex items-center gap-3 py-2">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs text-muted-foreground shrink-0">Terminés ({completed.length})</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+            )}
+            {completed.map((custom) => (
+              <CustomCard key={custom.id} custom={custom} onClick={() => router.push(`/model/customs/${custom.id}`)} showModel={false} dimCompleted />
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }

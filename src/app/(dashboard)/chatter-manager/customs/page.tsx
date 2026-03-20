@@ -73,19 +73,30 @@ export default function ChatterManagerCustomsPage() {
           <FileText className="mb-4 h-12 w-12 text-muted-foreground/50" />
           <h3 className="text-lg font-medium">Aucun custom pour le moment</h3>
         </div>
-      ) : (
-        <div className="grid gap-3">
-          {customs.map((custom) => (
-            <CustomCard
-              key={custom.id}
-              custom={custom}
-              onClick={() =>
-                router.push(`/chatter-manager/customs/${custom.id}`)
-              }
-            />
-          ))}
-        </div>
-      )}
+      ) : (() => {
+        const statusOrder: Record<string, number> = { NOT_STARTED: 0, IN_PROGRESS: 1, COMPLETED: 2 };
+        const sorted = [...customs].sort((a, b) => (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9));
+        const active = sorted.filter((c) => c.status !== "COMPLETED");
+        const completed = sorted.filter((c) => c.status === "COMPLETED");
+
+        return (
+          <div className="grid gap-3">
+            {active.map((custom) => (
+              <CustomCard key={custom.id} custom={custom} onClick={() => router.push(`/chatter-manager/customs/${custom.id}`)} />
+            ))}
+            {completed.length > 0 && active.length > 0 && (
+              <div className="flex items-center gap-3 py-2">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs text-muted-foreground shrink-0">Terminés ({completed.length})</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+            )}
+            {completed.map((custom) => (
+              <CustomCard key={custom.id} custom={custom} onClick={() => router.push(`/chatter-manager/customs/${custom.id}`)} dimCompleted />
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -28,6 +28,9 @@ import {
   Clock,
   CheckCircle2,
   DollarSign,
+  CircleDot,
+  Loader2,
+  CircleCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type {
@@ -149,28 +152,36 @@ export default function AdminCustomsPage() {
     fetchStats();
   }
 
-  // Tri
+  // Tri par statut (NOT_STARTED > IN_PROGRESS > COMPLETED) puis par date
+  const statusOrder: Record<string, number> = {
+    NOT_STARTED: 0,
+    IN_PROGRESS: 1,
+    COMPLETED: 2,
+  };
+
   const sortedCustoms = useMemo(() => {
     const sorted = [...customs];
-    switch (sortBy) {
-      case "oldest":
-        sorted.sort(
-          (a, b) =>
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        );
-        break;
-      case "price_desc":
-        sorted.sort((a, b) => b.totalPrice - a.totalPrice);
-        break;
-      case "price_asc":
-        sorted.sort((a, b) => a.totalPrice - b.totalPrice);
-        break;
-      default:
-        sorted.sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-    }
+
+    // Secondary sort (within status group)
+    const secondarySort = (a: CustomListItem, b: CustomListItem) => {
+      switch (sortBy) {
+        case "oldest":
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        case "price_desc":
+          return b.totalPrice - a.totalPrice;
+        case "price_asc":
+          return a.totalPrice - b.totalPrice;
+        default:
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+    };
+
+    sorted.sort((a, b) => {
+      const statusDiff = (statusOrder[a.status] ?? 9) - (statusOrder[b.status] ?? 9);
+      if (statusDiff !== 0) return statusDiff;
+      return secondarySort(a, b);
+    });
+
     return sorted;
   }, [customs, sortBy]);
 
@@ -314,6 +325,86 @@ export default function AdminCustomsPage() {
         </div>
       )}
 
+      {/* Récap par statut */}
+      {customs.length > 0 && (
+        <div className="grid gap-3 grid-cols-3">
+          <Card
+            className={cn(
+              "border-l-4 border-l-red-400 cursor-pointer transition-colors hover:bg-red-50/50",
+              filters.status === "NOT_STARTED" && "ring-2 ring-red-400"
+            )}
+            onClick={() =>
+              setFilters((f) => ({
+                ...f,
+                status: f.status === "NOT_STARTED" ? "" : "NOT_STARTED",
+              }))
+            }
+          >
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="rounded-full bg-red-100 p-2 dark:bg-red-950">
+                <CircleDot className="h-5 w-5 text-red-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">
+                  {customs.filter((c) => c.status === "NOT_STARTED").length}
+                </p>
+                <p className="text-xs text-muted-foreground">Non commencé</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card
+            className={cn(
+              "border-l-4 border-l-amber-400 cursor-pointer transition-colors hover:bg-amber-50/50",
+              filters.status === "IN_PROGRESS" && "ring-2 ring-amber-400"
+            )}
+            onClick={() =>
+              setFilters((f) => ({
+                ...f,
+                status: f.status === "IN_PROGRESS" ? "" : "IN_PROGRESS",
+              }))
+            }
+          >
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="rounded-full bg-amber-100 p-2 dark:bg-amber-950">
+                <Loader2 className="h-5 w-5 text-amber-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">
+                  {customs.filter((c) => c.status === "IN_PROGRESS").length}
+                </p>
+                <p className="text-xs text-muted-foreground">En cours</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card
+            className={cn(
+              "border-l-4 border-l-emerald-400 cursor-pointer transition-colors hover:bg-emerald-50/50",
+              filters.status === "COMPLETED" && "ring-2 ring-emerald-400"
+            )}
+            onClick={() =>
+              setFilters((f) => ({
+                ...f,
+                status: f.status === "COMPLETED" ? "" : "COMPLETED",
+              }))
+            }
+          >
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="rounded-full bg-emerald-100 p-2 dark:bg-emerald-950">
+                <CircleCheck className="h-5 w-5 text-emerald-500" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold">
+                  {customs.filter((c) => c.status === "COMPLETED").length}
+                </p>
+                <p className="text-xs text-muted-foreground">Terminé</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Filtres */}
       <CustomFiltersBar
         filters={filters}
@@ -404,18 +495,42 @@ export default function AdminCustomsPage() {
             </div>
           ))}
         </div>
-      ) : (
-        // Affichage normal
-        <div className="grid gap-3">
-          {sortedCustoms.map((custom) => (
-            <CustomCard
-              key={custom.id}
-              custom={custom}
-              onClick={() => router.push(`/admin/customs/${custom.id}`)}
-            />
-          ))}
-        </div>
-      )}
+      ) : (() => {
+        // Affichage normal avec séparateur "Terminés"
+        const activeCustoms = sortedCustoms.filter((c) => c.status !== "COMPLETED");
+        const completedCustoms = sortedCustoms.filter((c) => c.status === "COMPLETED");
+
+        return (
+          <div className="grid gap-3">
+            {activeCustoms.map((custom) => (
+              <CustomCard
+                key={custom.id}
+                custom={custom}
+                onClick={() => router.push(`/admin/customs/${custom.id}`)}
+              />
+            ))}
+
+            {completedCustoms.length > 0 && activeCustoms.length > 0 && (
+              <div className="flex items-center gap-3 py-2">
+                <div className="h-px flex-1 bg-border" />
+                <span className="text-xs text-muted-foreground shrink-0">
+                  Terminés ({completedCustoms.length})
+                </span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+            )}
+
+            {completedCustoms.map((custom) => (
+              <CustomCard
+                key={custom.id}
+                custom={custom}
+                onClick={() => router.push(`/admin/customs/${custom.id}`)}
+                dimCompleted
+              />
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
