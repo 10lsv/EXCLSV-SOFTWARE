@@ -19,8 +19,6 @@ import {
   CheckCircle2,
   Info,
   CheckCheck,
-  Trash2,
-  X,
   Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -61,6 +59,7 @@ export function NotificationCenter() {
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
+    params.set("source", "center");
     params.set("page", String(page));
     if (filter === "unread") params.set("unread", "true");
 
@@ -82,25 +81,6 @@ export function NotificationCenter() {
     await fetch("/api/notifications/read-all", { method: "PATCH" });
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
     setUnreadCount(0);
-  }
-
-  async function handleDeleteAll() {
-    if (!confirm("Supprimer toutes les notifications ? Cette action est irréversible.")) return;
-    await fetch("/api/notifications/delete-all", { method: "DELETE" });
-    setNotifications([]);
-    setTotal(0);
-    setUnreadCount(0);
-  }
-
-  async function handleDelete(e: React.MouseEvent, notifId: string) {
-    e.stopPropagation();
-    const notif = notifications.find((n) => n.id === notifId);
-    await fetch(`/api/notifications/${notifId}`, { method: "DELETE" });
-    setNotifications((prev) => prev.filter((n) => n.id !== notifId));
-    setTotal((t) => t - 1);
-    if (notif && !notif.isRead) {
-      setUnreadCount((c) => Math.max(0, c - 1));
-    }
   }
 
   async function handleMarkRead(e: React.MouseEvent, notifId: string) {
@@ -143,12 +123,6 @@ export function NotificationCenter() {
               Tout marquer comme lu
             </Button>
           )}
-          {notifications.length > 0 && (
-            <Button variant="outline" size="sm" onClick={handleDeleteAll} className="text-destructive hover:text-destructive">
-              <Trash2 className="mr-2 h-4 w-4" />
-              Tout supprimer
-            </Button>
-          )}
         </div>
       </div>
 
@@ -179,7 +153,7 @@ export function NotificationCenter() {
           <p className="text-sm text-muted-foreground">
             {filter === "unread"
               ? "Toutes vos notifications sont lues"
-              : "Vous n'avez aucune notification"}
+              : "Aucune notification sur les 30 derniers jours"}
           </p>
         </div>
       ) : (
@@ -191,7 +165,9 @@ export function NotificationCenter() {
                 key={notif.id}
                 className={cn(
                   "group cursor-pointer transition-colors hover:bg-muted/50",
-                  !notif.isRead && "border-l-4 border-l-blue-500 bg-blue-50/30 dark:bg-blue-950/10"
+                  !notif.isRead
+                    ? "border-l-4 border-l-blue-500 bg-blue-50/30 dark:bg-blue-950/10"
+                    : "opacity-70"
                 )}
                 onClick={() => handleClick(notif)}
               >
@@ -240,13 +216,6 @@ export function NotificationCenter() {
                         <Eye className="h-4 w-4 text-muted-foreground hover:text-blue-500" />
                       </button>
                     )}
-                    <button
-                      onClick={(e) => handleDelete(e, notif.id)}
-                      className="rounded p-1 hover:bg-muted"
-                      title="Supprimer"
-                    >
-                      <X className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                    </button>
                   </div>
                 </CardContent>
               </Card>

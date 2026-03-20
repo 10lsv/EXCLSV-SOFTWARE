@@ -55,7 +55,7 @@ export function NotificationBell({ notificationsPath }: NotificationBellProps) {
   const [open, setOpen] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
-    const res = await fetch("/api/notifications?limit=5");
+    const res = await fetch("/api/notifications?source=popover");
     const json = await res.json();
     if (json.success) {
       setNotifications(json.data.notifications);
@@ -81,10 +81,11 @@ export function NotificationBell({ notificationsPath }: NotificationBellProps) {
     if (notif.link) router.push(notif.link);
   }
 
-  async function handleDelete(e: React.MouseEvent, notifId: string) {
+  async function handleDismiss(e: React.MouseEvent, notifId: string) {
     e.stopPropagation();
     const notif = notifications.find((n) => n.id === notifId);
-    await fetch(`/api/notifications/${notifId}`, { method: "DELETE" });
+    // Masquer du volet (ne supprime PAS de la base de données)
+    await fetch(`/api/notifications/${notifId}/dismiss`, { method: "PATCH" });
     setNotifications((prev) => prev.filter((n) => n.id !== notifId));
     if (notif && !notif.isRead) {
       setUnreadCount((c) => Math.max(0, c - 1));
@@ -167,7 +168,7 @@ export function NotificationBell({ notificationsPath }: NotificationBellProps) {
                   </div>
                   <div
                     className="mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={(e) => handleDelete(e, notif.id)}
+                    onClick={(e) => handleDismiss(e, notif.id)}
                     role="button"
                     tabIndex={0}
                   >
