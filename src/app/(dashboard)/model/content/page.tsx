@@ -6,6 +6,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Minus,
   Plus,
   ExternalLink,
@@ -14,6 +19,7 @@ import {
   ChevronRight,
   Calendar,
   GripVertical,
+  CalendarPlus,
 } from "lucide-react";
 import { cn, getMondayUTC } from "@/lib/utils";
 import { format, addDays, isToday, isSameDay } from "date-fns";
@@ -25,6 +31,7 @@ import {
   useDroppable,
   type DragStartEvent,
   type DragEndEvent,
+  type DragOverEvent,
   PointerSensor,
   TouchSensor,
   useSensor,
@@ -127,55 +134,117 @@ function CalendarBadge({
   );
 }
 
-// ─── Droppable day column ───
+// ─── Droppable day cell (whole cell is droppable) ───
 
-function DayColumn({
+function DroppableDayCell({
   dayIndex,
-  children,
-  isOver,
+  day,
+  grouped,
+  dayTotal,
+  isDropTarget,
 }: {
   dayIndex: number;
-  children: React.ReactNode;
-  isOver: boolean;
+  day: Date;
+  grouped: GroupedEntry[];
+  dayTotal: number;
+  isDropTarget: boolean;
 }) {
-  const { setNodeRef } = useDroppable({
+  const { setNodeRef, isOver } = useDroppable({
     id: `day-${dayIndex}`,
     data: { type: "day", dayIndex },
   });
 
+  const today = isToday(day);
+  const showDropHint = isDropTarget || isOver;
+
   return (
-    <div ref={setNodeRef} className="flex-1 space-y-1 min-h-[40px]">
-      {children}
-      {isOver && (
-        <div className="w-full rounded border-2 border-dashed border-primary/50 bg-primary/10 py-1 text-center text-[9px] text-primary animate-pulse">
-          Deposer ici
+    <div
+      ref={setNodeRef}
+      className={cn(
+        "rounded-lg border p-2 min-h-[120px] flex flex-col transition-all",
+        today && "border-primary border-2 bg-primary/5",
+        !today && dayTotal >= 5 && "bg-amber-50/50 dark:bg-amber-950/10",
+        !today && dayTotal >= 8 && "bg-orange-50/50 dark:bg-orange-950/10",
+        showDropHint && "ring-2 ring-primary bg-primary/10 border-primary"
+      )}
+    >
+      {/* Header du jour */}
+      <div className="text-center mb-1.5">
+        <div
+          className={cn(
+            "text-[10px] font-medium uppercase tracking-wider",
+            today ? "text-primary" : "text-muted-foreground"
+          )}
+        >
+          {DAY_LABELS[dayIndex]}
+        </div>
+        <div
+          className={cn(
+            "text-xs",
+            today ? "font-bold text-primary" : "text-muted-foreground"
+          )}
+        >
+          {format(day, "dd/MM")}
+        </div>
+      </div>
+
+      {/* Badges */}
+      <div className="flex-1 space-y-1">
+        {grouped.map((g) => (
+          <CalendarBadge key={g.taskId} grouped={g} dayIndex={dayIndex} />
+        ))}
+        {showDropHint && grouped.length === 0 && (
+          <div className="w-full rounded border-2 border-dashed border-primary/50 bg-primary/10 py-1 text-center text-[9px] text-primary animate-pulse">
+            Deposer ici
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      {dayTotal > 0 && (
+        <div className="mt-1 text-center text-[10px] text-muted-foreground font-medium border-t pt-1">
+          {dayTotal} contenu{dayTotal > 1 ? "s" : ""}
         </div>
       )}
     </div>
   );
 }
 
-// ─── Draggable unplanned task ───
+// ─── Draggable + button unplanned task ───
 
-function UnplannedDraggable({
+function UnplannedTask({
   task,
   remaining,
   dragQty,
   onQtyChange,
+  weekDays,
+  onPlan,
 }: {
   task: Task;
   remaining: number;
   dragQty: number;
   onQtyChange: (taskId: string, qty: number) => void;
+  weekDays: Date[];
+  onPlan: (taskId: string, dayIndex: number, qty: number) => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `unplanned-${task.id}`,
     data: { type: "unplanned", taskId: task.id, quantity: dragQty },
   });
 
+  const [popDay, setPopDay] = useState(0);
+  const [popQty, setPopQty] = useState(1);
+  const [popOpen, setPopOpen] = useState(false);
+
   const config = platformConfig[task.platform] || {
     badgeClass: "bg-gray-500 text-white",
   };
+
+  function handlePopSubmit() {
+    onPlan(task.id, popDay, popQty);
+    setPopOpen(false);
+    setPopQty(1);
+  }
 
   return (
     <div
@@ -185,6 +254,7 @@ function UnplannedDraggable({
         isDragging && "opacity-30 ring-2 ring-primary"
       )}
     >
+      {/* Grip handle for drag */}
       <div
         {...attributes}
         {...listeners}
@@ -192,6 +262,7 @@ function UnplannedDraggable({
       >
         <GripVertical className="h-4 w-4" />
       </div>
+
       <Badge className={cn("text-[10px] shrink-0", config.badgeClass)}>
         {task.platform}
       </Badge>
@@ -201,6 +272,8 @@ function UnplannedDraggable({
       <span className="text-xs text-muted-foreground shrink-0">
         {remaining} restant{remaining > 1 ? "s" : ""}
       </span>
+
+      {/* Drag quantity selector */}
       <select
         className="h-6 rounded border bg-background px-1 text-[10px] w-12 shrink-0"
         value={dragQty}
@@ -213,14 +286,68 @@ function UnplannedDraggable({
           </option>
         ))}
       </select>
+
+      {/* Méthode A — Bouton Planifier avec popover */}
+      <Popover open={popOpen} onOpenChange={setPopOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            title="Planifier"
+          >
+            <CalendarPlus className="h-3.5 w-3.5" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-56 p-3" align="end">
+          <div className="space-y-3">
+            <p className="text-xs font-medium">{task.category}</p>
+            <div className="space-y-1.5">
+              <label className="text-[11px] text-muted-foreground">Jour</label>
+              <select
+                className="w-full h-8 rounded border bg-background px-2 text-xs"
+                value={popDay}
+                onChange={(e) => setPopDay(Number(e.target.value))}
+              >
+                {weekDays.map((d, i) => (
+                  <option key={i} value={i}>
+                    {DAY_LABELS[i]} {format(d, "dd/MM")}
+                    {isToday(d) ? " (auj.)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[11px] text-muted-foreground">
+                Quantité (max {remaining})
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={remaining}
+                value={popQty}
+                onChange={(e) =>
+                  setPopQty(
+                    Math.max(1, Math.min(remaining, Number(e.target.value)))
+                  )
+                }
+                className="w-full h-8 rounded border bg-background px-2 text-xs"
+              />
+            </div>
+            <Button size="sm" className="w-full h-8 text-xs" onClick={handlePopSubmit}>
+              Valider
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
 
 // ─── Droppable "unplan" zone ───
 
-function UnplanZone({ isOver }: { isOver: boolean }) {
-  const { setNodeRef } = useDroppable({
+function UnplanZone() {
+  const { setNodeRef, isOver } = useDroppable({
     id: "unplan-zone",
     data: { type: "unplan" },
   });
@@ -257,11 +384,12 @@ export default function ModelContentPage() {
     quantity: number;
   } | null>(null);
   const [overDayIndex, setOverDayIndex] = useState<number | null>(null);
-  const [overUnplan, setOverUnplan] = useState(false);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 200, tolerance: 5 },
+    })
   );
 
   const fetchTasks = useCallback(async () => {
@@ -328,7 +456,6 @@ export default function ModelContentPage() {
     });
     const json = await res.json();
     if (json.success) {
-      // The API may have merged with an existing entry — update or add
       const updatedEntry = json.data as PlanEntry;
       setTasks((prev) =>
         prev.map((t) => {
@@ -373,18 +500,12 @@ export default function ModelContentPage() {
     });
   }
 
-  function handleDragOver(event: DragEndEvent) {
-    const overId = event.over?.id?.toString() || "";
+  function handleDragOver(event: DragOverEvent) {
     const overData = event.over?.data?.current;
     if (overData?.type === "day") {
-      setOverDayIndex(overData.dayIndex);
-      setOverUnplan(false);
-    } else if (overData?.type === "unplan") {
-      setOverDayIndex(null);
-      setOverUnplan(true);
+      setOverDayIndex(overData.dayIndex as number);
     } else {
       setOverDayIndex(null);
-      setOverUnplan(false);
     }
   }
 
@@ -394,26 +515,21 @@ export default function ModelContentPage() {
 
     setActiveDrag(null);
     setOverDayIndex(null);
-    setOverUnplan(false);
 
     if (!activeData || !overData) return;
 
-    // Drop on a day
     if (overData.type === "day") {
       const targetDay = overData.dayIndex as number;
 
       if (activeData.type === "unplanned") {
-        // Unplanned → day
         await planTask(activeData.taskId, targetDay, activeData.quantity);
       } else if (activeData.type === "calendar-entry") {
-        // Calendar → different day (move)
         if (activeData.fromDay === targetDay) return;
         await deleteEntries(activeData.entryIds);
         await planTask(activeData.taskId, targetDay, activeData.quantity);
       }
     }
 
-    // Drop on unplan zone
     if (overData.type === "unplan" && activeData.type === "calendar-entry") {
       await deleteEntries(activeData.entryIds);
     }
@@ -425,7 +541,6 @@ export default function ModelContentPage() {
     ? Array.from({ length: 7 }, (_, i) => addDays(new Date(weekStart), i))
     : [];
 
-  // Group entries by taskId per day (fixes stacking)
   function getGroupedEntriesForDay(dayDate: Date): GroupedEntry[] {
     const map = new Map<string, GroupedEntry>();
     for (const task of tasks) {
@@ -459,7 +574,6 @@ export default function ModelContentPage() {
       .filter((x) => x.remaining > 0);
   }
 
-  // Grouper par plateforme
   const groups: Record<string, Task[]> = {};
   for (const t of tasks) {
     if (!groups[t.platform]) groups[t.platform] = [];
@@ -563,92 +677,42 @@ export default function ModelContentPage() {
                     (s, g) => s + g.totalQty,
                     0
                   );
-                  const today = isToday(day);
-                  const isDropTarget = overDayIndex === i;
 
                   return (
-                    <div
+                    <DroppableDayCell
                       key={i}
-                      className={cn(
-                        "rounded-lg border p-2 min-h-[120px] flex flex-col transition-all",
-                        today && "border-primary border-2 bg-primary/5",
-                        !today &&
-                          dayTotal >= 5 &&
-                          "bg-amber-50/50 dark:bg-amber-950/10",
-                        !today &&
-                          dayTotal >= 8 &&
-                          "bg-orange-50/50 dark:bg-orange-950/10",
-                        isDropTarget &&
-                          "ring-2 ring-primary bg-primary/10 border-primary"
-                      )}
-                    >
-                      <div className="text-center mb-1.5">
-                        <div
-                          className={cn(
-                            "text-[10px] font-medium uppercase tracking-wider",
-                            today
-                              ? "text-primary"
-                              : "text-muted-foreground"
-                          )}
-                        >
-                          {DAY_LABELS[i]}
-                        </div>
-                        <div
-                          className={cn(
-                            "text-xs",
-                            today
-                              ? "font-bold text-primary"
-                              : "text-muted-foreground"
-                          )}
-                        >
-                          {format(day, "dd/MM")}
-                        </div>
-                      </div>
-
-                      <DayColumn dayIndex={i} isOver={isDropTarget}>
-                        {grouped.map((g) => (
-                          <CalendarBadge
-                            key={g.taskId}
-                            grouped={g}
-                            dayIndex={i}
-                          />
-                        ))}
-                      </DayColumn>
-
-                      {dayTotal > 0 && (
-                        <div className="mt-1 text-center text-[10px] text-muted-foreground font-medium border-t pt-1">
-                          {dayTotal} contenu{dayTotal > 1 ? "s" : ""}
-                        </div>
-                      )}
-                    </div>
+                      dayIndex={i}
+                      day={day}
+                      grouped={grouped}
+                      dayTotal={dayTotal}
+                      isDropTarget={overDayIndex === i}
+                    />
                   );
                 })}
               </div>
             </div>
 
-            {/* Unplan drop zone — visible when dragging from calendar */}
+            {/* Unplan drop zone — visible when dragging */}
             {activeDrag && (
               <div className="mt-3">
-                <UnplanZone isOver={overUnplan} />
+                <UnplanZone />
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* ─── Contenu à planifier (draggable) ─── */}
+        {/* ─── Contenu à planifier ─── */}
         {unplannedTasks.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">
-                Contenu à planifier
-              </CardTitle>
+              <CardTitle className="text-base">Contenu à planifier</CardTitle>
               <p className="text-xs text-muted-foreground">
-                Glissez les tâches vers un jour du calendrier
+                Utilisez le bouton ou glissez vers un jour du calendrier
               </p>
             </CardHeader>
             <CardContent className="space-y-1.5 pt-0">
               {unplannedTasks.map(({ task, remaining }) => (
-                <UnplannedDraggable
+                <UnplannedTask
                   key={task.id}
                   task={task}
                   remaining={remaining}
@@ -656,6 +720,8 @@ export default function ModelContentPage() {
                   onQtyChange={(id, qty) =>
                     setDragQtys((prev) => ({ ...prev, [id]: qty }))
                   }
+                  weekDays={weekDays}
+                  onPlan={planTask}
                 />
               ))}
             </CardContent>
@@ -814,12 +880,12 @@ export default function ModelContentPage() {
         })}
       </div>
 
-      {/* ─── Drag overlay ─── */}
-      <DragOverlay>
+      {/* ─── Drag overlay (follows cursor exactly) ─── */}
+      <DragOverlay dropAnimation={null}>
         {activeDrag && (
           <div
             className={cn(
-              "rounded border px-2 py-1 text-xs font-medium shadow-lg opacity-90",
+              "rounded border px-2 py-1 text-xs font-medium shadow-lg pointer-events-none",
               platformConfig[activeDrag.platform]?.calBadge ||
                 "bg-gray-100 text-gray-700 border-gray-200"
             )}
