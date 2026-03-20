@@ -17,21 +17,30 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 export function usePushNotifications() {
+  console.log("[Push] Hook loaded");
   const [supported, setSupported] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
   const [showBanner, setShowBanner] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const isSupported =
-      typeof window !== "undefined" &&
-      "Notification" in window &&
-      "serviceWorker" in navigator &&
-      "PushManager" in window;
+    console.log("[Push] useEffect running");
 
+    const hasWindow = typeof window !== "undefined";
+    const hasNotification = hasWindow && "Notification" in window;
+    const hasSW = hasWindow && "serviceWorker" in navigator;
+    const hasPush = hasWindow && "PushManager" in window;
+    console.log("[Push] Support check:", { hasWindow, hasNotification, hasSW, hasPush });
+
+    const isSupported = hasWindow && hasNotification && hasSW && hasPush;
     setSupported(isSupported);
 
-    if (!isSupported) return;
+    if (!isSupported) {
+      console.log("[Push] Not supported — aborting");
+      return;
+    }
+
+    console.log("[Push] Hook mounted, permission:", Notification.permission);
 
     // Permission already granted — auto-subscribe if no existing subscription
     if (Notification.permission === "granted") {

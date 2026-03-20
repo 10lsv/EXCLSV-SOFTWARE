@@ -5,7 +5,9 @@ import { Bell, X } from "lucide-react";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 
 export function PushNotificationBanner() {
+  console.log("[Push] PushNotificationBanner mounted");
   const { showBanner, loading, subscribe, dismiss } = usePushNotifications();
+  console.log("[Push] showBanner:", showBanner);
 
   if (!showBanner) return null;
 
