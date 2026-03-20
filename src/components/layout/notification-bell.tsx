@@ -115,13 +115,17 @@ export function NotificationBell({ notificationsPath }: NotificationBellProps) {
     if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
     try {
       const res = await fetch("/api/notifications?countOnly=true");
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.log("[NotifPoll] fetch failed, status:", res.status);
+        return;
+      }
       const json = await res.json();
       if (json.success) {
+        console.log("[NotifPoll] count:", json.data.count);
         setUnreadCount(json.data.count);
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.log("[NotifPoll] error:", err);
     }
   }, []);
 

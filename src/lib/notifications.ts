@@ -18,8 +18,10 @@ async function sendPush(userId: string, payload: { title: string; message: strin
     where: { userId },
   });
 
+  console.log(`[Push] Sending to ${subscriptions.length} subscription(s) for user ${userId}`);
   for (const sub of subscriptions) {
     try {
+      console.log("[Push] Sending to", sub.endpoint.substring(0, 50));
       await webpush.sendNotification(
         {
           endpoint: sub.endpoint,

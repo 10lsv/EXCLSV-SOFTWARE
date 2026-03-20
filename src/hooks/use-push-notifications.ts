@@ -103,8 +103,8 @@ export function usePushNotifications() {
 
       setSubscribed(true);
       setShowBanner(false);
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error("[PushNotif] subscribe error:", err);
     }
     setLoading(false);
   }, [supported]);
