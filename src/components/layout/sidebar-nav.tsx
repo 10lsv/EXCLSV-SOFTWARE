@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
 import { Role } from "@prisma/client";
 import { cn } from "@/lib/utils";
 import {
@@ -77,11 +78,31 @@ const navByRole: Record<Role, NavItem[]> = {
 export function SidebarNav({ role }: { role: Role }) {
   const pathname = usePathname();
   const items = navByRole[role] || [];
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const pollCount = useCallback(async () => {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    try {
+      const res = await fetch("/api/notifications?countOnly=true");
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.success) setUnreadCount(json.data.count);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    pollCount();
+    const interval = setInterval(pollCount, 10000);
+    return () => clearInterval(interval);
+  }, [pollCount]);
 
   return (
     <nav className="flex flex-col gap-1 px-3 py-2">
       {items.map((item) => {
         const isActive = pathname.startsWith(item.href);
+        const isNotif = item.label === "Notifications";
         return (
           <Link
             key={item.href}
@@ -95,6 +116,11 @@ export function SidebarNav({ role }: { role: Role }) {
           >
             <item.icon className="h-4 w-4" />
             {item.label}
+            {isNotif && unreadCount > 0 && (
+              <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
           </Link>
         );
       })}

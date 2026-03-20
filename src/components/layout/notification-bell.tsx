@@ -110,11 +110,26 @@ export function NotificationBell({ notificationsPath }: NotificationBellProps) {
     }
   }, []);
 
+  // Lightweight count polling every 10s (only when tab is visible)
+  const pollCount = useCallback(async () => {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    try {
+      const res = await fetch("/api/notifications?countOnly=true");
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json.success) {
+        setUnreadCount(json.data.count);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000);
+    const interval = setInterval(pollCount, 10000);
     return () => clearInterval(interval);
-  }, [fetchNotifications]);
+  }, [fetchNotifications, pollCount]);
 
   async function handleClick(notif: Notification) {
     if (!notif.isRead) {
@@ -133,7 +148,7 @@ export function NotificationBell({ notificationsPath }: NotificationBellProps) {
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(v) => { setOpen(v); if (v) fetchNotifications(); }}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-5 w-5" />

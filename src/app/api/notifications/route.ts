@@ -19,8 +19,17 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = req.nextUrl;
   const source = searchParams.get("source"); // "popover" | "center" | null
+  const countOnly = searchParams.get("countOnly") === "true";
   const unreadOnly = searchParams.get("unread") === "true";
   const userId = session!.user.id;
+
+  // Lightweight count-only endpoint for polling
+  if (countOnly) {
+    const count = await prisma.notification.count({
+      where: { userId, isRead: false },
+    });
+    return jsonSuccess({ count });
+  }
 
   if (source === "popover") {
     // Volet déroulant : 5 dernières non lues + non dismissées
