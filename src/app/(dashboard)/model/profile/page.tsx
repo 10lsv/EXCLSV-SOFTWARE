@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,14 +8,23 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Pencil, Lock, Loader2 } from "lucide-react";
+import {
+  Pencil,
+  Lock,
+  Loader2,
+  Camera,
+  ExternalLink,
+  AlertTriangle,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 interface Profile {
   id: string;
@@ -58,40 +67,106 @@ interface Profile {
 
 type SectionKey = "identity" | "physical" | "personality" | "social";
 
-function InfoRow({ label, value, locked }: { label: string; value: React.ReactNode; locked?: boolean }) {
+const MAX_PHOTO_SIZE = 2 * 1024 * 1024; // 2Mo
+
+function InfoRow({ label, value, locked, fullWidth }: {
+  label: string;
+  value: React.ReactNode;
+  locked?: boolean;
+  fullWidth?: boolean;
+}) {
   return (
-    <div className="flex flex-col gap-1 py-2">
-      <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+    <div className={cn("flex flex-col gap-1 py-2.5", fullWidth && "md:col-span-2")}>
+      <span className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
         {label}
         {locked && (
           <span title="Modifiable uniquement par l'agence">
-            <Lock className="h-3 w-3 text-muted-foreground/60" />
+            <Lock className="h-3 w-3" />
           </span>
         )}
       </span>
-      <span className="text-sm font-medium">{value || "—"}</span>
+      <span className="text-sm font-semibold text-foreground">{value || "—"}</span>
     </div>
+  );
+}
+
+function SocialBadge({ url, label }: { url: string | null; label: string }) {
+  if (!url) return null;
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer">
+      <Badge variant="outline" className="gap-1 hover:bg-muted transition-colors cursor-pointer">
+        {label}
+        <ExternalLink className="h-3 w-3" />
+      </Badge>
+    </a>
   );
 }
 
 export default function ModelProfilePage() {
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [editSection, setEditSection] = useState<SectionKey | null>(null);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const fetchProfile = useCallback(async () => {
     const res = await fetch("/api/models/me");
     const json = await res.json();
-    if (json.success) setProfile(json.data);
+    if (json.success) {
+      setProfile(json.data);
+      setPhotoPreview(null);
+    }
     setLoading(false);
   }, []);
 
   useEffect(() => {
     fetchProfile();
   }, [fetchProfile]);
+
+  // Photo upload
+  function handlePhotoClick() {
+    fileInputRef.current?.click();
+  }
+
+  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > MAX_PHOTO_SIZE) {
+      toast({ title: "Image trop lourde", description: "Maximum 2Mo", variant: "destructive" });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result as string;
+      setPhotoPreview(base64);
+      setUploadingPhoto(true);
+
+      const res = await fetch("/api/models/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoUrl: base64 }),
+      });
+
+      if (res.ok) {
+        toast({ title: "Photo mise à jour" });
+        fetchProfile();
+      } else {
+        toast({ title: "Erreur", description: "Impossible de sauvegarder la photo", variant: "destructive" });
+        setPhotoPreview(null);
+      }
+      setUploadingPhoto(false);
+    };
+    reader.readAsDataURL(file);
+
+    // Reset input so the same file can be selected again
+    e.target.value = "";
+  }
 
   function openEdit(section: SectionKey) {
     if (!profile) return;
@@ -120,10 +195,7 @@ export default function ModelProfilePage() {
     for (const f of fields) {
       const val = form[f.key] ?? "";
       if (f.type === "array") {
-        body[f.key] = val
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean);
+        body[f.key] = val.split(",").map((s) => s.trim()).filter(Boolean);
       } else {
         body[f.key] = val || null;
       }
@@ -154,19 +226,15 @@ export default function ModelProfilePage() {
   }
 
   if (!profile) {
-    return (
-      <div className="py-20 text-center text-muted-foreground">
-        Profil introuvable.
-      </div>
-    );
+    return <div className="py-20 text-center text-muted-foreground">Profil introuvable.</div>;
   }
 
+  const displayPhoto = photoPreview || profile.photoUrl || undefined;
   const billingLabels: Record<string, string> = {
     bimonthly: "Bimensuel (1er et 15)",
     monthly: "Mensuel",
     weekly: "Hebdomadaire",
   };
-
   const sexLabels: Record<string, string> = {
     soft: "Soft",
     medium: "Medium",
@@ -175,26 +243,64 @@ export default function ModelProfilePage() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Avatar className="h-16 w-16">
-          <AvatarImage src={profile.photoUrl || undefined} />
-          <AvatarFallback className="text-lg">
-            {profile.stageName.slice(0, 2).toUpperCase()}
-          </AvatarFallback>
-        </Avatar>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{profile.stageName}</h1>
-          <p className="text-sm text-muted-foreground">
-            {profile.location || profile.user.email}
-          </p>
-        </div>
-      </div>
+    <div className="space-y-6 max-w-3xl mx-auto">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handlePhotoChange}
+      />
 
-      {/* Identité */}
-      <SectionCard title="Identité" onEdit={() => openEdit("identity")}>
-        <div className="grid gap-x-8 gap-y-1 md:grid-cols-2">
+      {/* ─── Header ─── */}
+      <Card className="border-0 shadow-none bg-transparent">
+        <CardContent className="flex flex-col items-center gap-4 p-0 md:flex-row md:items-start md:gap-6">
+          {/* Photo */}
+          <button
+            onClick={handlePhotoClick}
+            disabled={uploadingPhoto}
+            className="group relative shrink-0"
+          >
+            <Avatar className="h-28 w-28 ring-2 ring-border">
+              <AvatarImage src={displayPhoto} />
+              <AvatarFallback className="text-2xl font-bold bg-muted">
+                {profile.stageName.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+              {uploadingPhoto ? (
+                <Loader2 className="h-6 w-6 animate-spin text-white" />
+              ) : (
+                <Camera className="h-6 w-6 text-white" />
+              )}
+            </div>
+          </button>
+
+          {/* Info */}
+          <div className="flex-1 text-center md:text-left">
+            <h1 className="text-2xl font-bold tracking-tight">{profile.stageName}</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {profile.location || profile.user.email}
+            </p>
+            {/* Social badges */}
+            <div className="flex flex-wrap gap-1.5 mt-3 justify-center md:justify-start">
+              <SocialBadge url={profile.onlyfansUrl} label="OnlyFans" />
+              <SocialBadge url={profile.instagramUrl} label="Instagram" />
+              <SocialBadge url={profile.tiktokUrl} label="TikTok" />
+              <SocialBadge url={profile.twitterUrl} label="Twitter" />
+              <SocialBadge url={profile.redditUrl} label="Reddit" />
+              <SocialBadge url={profile.threadsUrl} label="Threads" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* ─── Identité ─── */}
+      <SectionCard title="Identité" accent="bg-foreground" onEdit={() => openEdit("identity")}>
+        <div className="grid gap-x-8 md:grid-cols-2">
           <InfoRow label="Nom complet" value={profile.user.name} />
           <InfoRow label="Nom de scène" value={profile.stageName} />
           <InfoRow
@@ -206,6 +312,7 @@ export default function ModelProfilePage() {
           <InfoRow label="Occupation" value={profile.occupation} />
           <InfoRow
             label="Langues"
+            fullWidth
             value={
               profile.languages.length > 0 ? (
                 <div className="flex flex-wrap gap-1">
@@ -219,64 +326,79 @@ export default function ModelProfilePage() {
         </div>
       </SectionCard>
 
-      {/* Physique */}
-      <SectionCard title="Profil physique" onEdit={() => openEdit("physical")}>
-        <div className="grid gap-x-8 gap-y-1 md:grid-cols-2">
+      {/* ─── Physique ─── */}
+      <SectionCard title="Profil physique" accent="bg-muted-foreground/40" onEdit={() => openEdit("physical")}>
+        <div className="grid gap-x-8 md:grid-cols-2">
           <InfoRow label="Taille" value={profile.height} />
           <InfoRow label="Cheveux" value={profile.hairColor} />
           <InfoRow label="Yeux" value={profile.eyeColor} />
           <InfoRow label="Tatouages" value={profile.tattoos} />
           <InfoRow label="Piercings" value={profile.piercings} />
           <InfoRow label="Style" value={profile.style} />
-          <InfoRow label="Traits distinctifs" value={profile.distinctFeatures} />
+          <InfoRow label="Traits distinctifs" value={profile.distinctFeatures} fullWidth />
         </div>
       </SectionCard>
 
-      {/* Personnalité */}
-      <SectionCard title="Personnalité & Boundaries" onEdit={() => openEdit("personality")}>
-        <InfoRow label="Traits de personnalité" value={profile.personalityTraits} />
-        <InfoRow
-          label="Contenu accepté"
-          value={
-            profile.acceptedContent.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
-                {profile.acceptedContent.map((c) => (
-                  <Badge key={c} variant="secondary">{c}</Badge>
-                ))}
-              </div>
-            ) : null
-          }
-        />
-        <InfoRow label="Limites strictes" value={profile.boundaries} />
-        <InfoRow
-          label="Niveau de sexualisation"
-          value={profile.sexualizationLevel ? sexLabels[profile.sexualizationLevel] || profile.sexualizationLevel : null}
-        />
-        <InfoRow label="Notes" value={profile.personalityNotes} />
+      {/* ─── Personnalité & Boundaries ─── */}
+      <SectionCard title="Personnalité & Boundaries" accent="bg-[#E91E8C]" onEdit={() => openEdit("personality")}>
+        <InfoRow label="Traits de personnalité" value={profile.personalityTraits} fullWidth />
+
+        {/* Contenu accepté — badges verts */}
+        <div className="py-2.5">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">Contenu accepté</span>
+          <div className="flex flex-wrap gap-1.5 mt-1.5">
+            {profile.acceptedContent.length > 0
+              ? profile.acceptedContent.map((c) => (
+                  <Badge key={c} className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 border-0">
+                    {c}
+                  </Badge>
+                ))
+              : <span className="text-sm font-semibold">—</span>}
+          </div>
+        </div>
+
+        {/* Boundaries — fond rosé */}
+        <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200/50 dark:border-red-900/30 p-4 mt-2">
+          <span className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-red-600 dark:text-red-400 font-medium">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            Limites strictes
+          </span>
+          <p className="text-sm font-semibold text-red-800 dark:text-red-300 mt-1">
+            {profile.boundaries || "—"}
+          </p>
+        </div>
+
+        <div className="grid gap-x-8 md:grid-cols-2 mt-2">
+          <InfoRow
+            label="Niveau de sexualisation"
+            value={profile.sexualizationLevel ? sexLabels[profile.sexualizationLevel] || profile.sexualizationLevel : null}
+          />
+        </div>
+        <InfoRow label="Notes" value={profile.personalityNotes} fullWidth />
       </SectionCard>
 
-      {/* Réseaux sociaux */}
-      <SectionCard title="Réseaux sociaux" onEdit={() => openEdit("social")}>
-        <div className="grid gap-x-8 gap-y-1 md:grid-cols-2">
-          <InfoRow label="OnlyFans" value={profile.onlyfansUrl} />
-          <InfoRow label="Instagram" value={profile.instagramHandle || profile.instagramUrl} />
-          <InfoRow label="TikTok" value={profile.tiktokHandle || profile.tiktokUrl} />
-          <InfoRow label="Twitter/X" value={profile.twitterHandle || profile.twitterUrl} />
-          <InfoRow label="Reddit" value={profile.redditHandle || profile.redditUrl} />
-          <InfoRow label="Threads" value={profile.threadsHandle || profile.threadsUrl} />
+      {/* ─── Réseaux sociaux ─── */}
+      <SectionCard title="Réseaux sociaux" accent="bg-blue-500" onEdit={() => openEdit("social")}>
+        <div className="grid gap-x-8 md:grid-cols-2">
+          <SocialRow label="OnlyFans" handle={profile.onlyfansUrl ? "Lien" : null} url={profile.onlyfansUrl} />
+          <SocialRow label="Instagram" handle={profile.instagramHandle} url={profile.instagramUrl} />
+          <SocialRow label="TikTok" handle={profile.tiktokHandle} url={profile.tiktokUrl} />
+          <SocialRow label="Twitter/X" handle={profile.twitterHandle} url={profile.twitterUrl} />
+          <SocialRow label="Reddit" handle={profile.redditHandle} url={profile.redditUrl} />
+          <SocialRow label="Threads" handle={profile.threadsHandle} url={profile.threadsUrl} />
         </div>
       </SectionCard>
 
-      {/* Contrat (lecture seule) */}
-      <Card>
+      {/* ─── Contrat (lecture seule) ─── */}
+      <Card className="bg-muted/30 border-muted">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
+          <CardTitle className="flex items-center gap-2 text-base text-muted-foreground">
+            <Lock className="h-4 w-4" />
             Contrat
-            <Lock className="h-4 w-4 text-muted-foreground/60" />
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-x-8 gap-y-1 md:grid-cols-2">
+          <div className="grid gap-x-8 md:grid-cols-2">
             <InfoRow label="Pourcentage agence" value={`${profile.agencyPercentage}%`} locked />
             <InfoRow label="Fréquence de facturation" value={billingLabels[profile.billingFrequency] || profile.billingFrequency} locked />
             <InfoRow
@@ -288,7 +410,7 @@ export default function ModelProfilePage() {
         </CardContent>
       </Card>
 
-      {/* Edit Dialog */}
+      {/* ─── Edit Dialog ─── */}
       <Dialog open={!!editSection} onOpenChange={(v) => !v && setEditSection(null)}>
         <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
           <DialogHeader>
@@ -300,7 +422,7 @@ export default function ModelProfilePage() {
             {editSection &&
               sectionFields[editSection].map((f) => (
                 <div key={f.key} className="space-y-1.5">
-                  <Label>{f.label}</Label>
+                  <Label className="text-xs uppercase tracking-wide">{f.label}</Label>
                   {f.type === "textarea" ? (
                     <Textarea
                       value={form[f.key] ?? ""}
@@ -327,28 +449,55 @@ export default function ModelProfilePage() {
   );
 }
 
+// ─── Sub-components ───
+
 function SectionCard({
   title,
+  accent,
   onEdit,
   children,
 }: {
   title: string;
+  accent: string;
   onEdit: () => void;
   children: React.ReactNode;
 }) {
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base">{title}</CardTitle>
-        <Button variant="ghost" size="sm" onClick={onEdit}>
-          <Pencil className="mr-1.5 h-3.5 w-3.5" />
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <div className="flex items-center gap-2.5">
+          <div className={cn("h-5 w-1 rounded-full", accent)} />
+          <CardTitle className="text-base">{title}</CardTitle>
+        </div>
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onEdit}>
+          <Pencil className="mr-1 h-3 w-3" />
           Modifier
         </Button>
       </CardHeader>
-      <CardContent>{children}</CardContent>
+      <CardContent className="pl-8">{children}</CardContent>
     </Card>
   );
 }
+
+function SocialRow({ label, handle, url }: { label: string; handle: string | null; url: string | null }) {
+  return (
+    <div className="flex items-center justify-between py-2.5">
+      <div>
+        <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
+        <p className="text-sm font-semibold">{handle || url || "—"}</p>
+      </div>
+      {url && (
+        <a href={url} target="_blank" rel="noopener noreferrer">
+          <Button variant="ghost" size="icon" className="h-7 w-7">
+            <ExternalLink className="h-3.5 w-3.5" />
+          </Button>
+        </a>
+      )}
+    </div>
+  );
+}
+
+// ─── Field definitions ───
 
 interface FieldDef {
   key: string;
