@@ -31,6 +31,15 @@ export default function ChatterCustomsPage() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState("");
 
+  // Fetch assigned models on mount
+  useEffect(() => {
+    (async () => {
+      const res = await fetch("/api/models?assigned=true");
+      const json = await res.json();
+      if (json.success) setModels(json.data.models);
+    })();
+  }, []);
+
   const fetchCustoms = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
@@ -45,20 +54,9 @@ export default function ChatterCustomsPage() {
     if (json.success) {
       setCustoms(json.data.customs);
       setTotal(json.data.total);
-      // Extract unique models from customs for filter (chatter only sees assigned models)
-      const uniqueModels = new Map<string, ModelOption>();
-      json.data.customs.forEach((c: CustomListItem) => {
-        if (!uniqueModels.has(c.model.id)) {
-          uniqueModels.set(c.model.id, {
-            id: c.model.id,
-            stageName: c.model.stageName,
-          });
-        }
-      });
-      if (models.length === 0) setModels(Array.from(uniqueModels.values()));
     }
     setLoading(false);
-  }, [filters, models.length]);
+  }, [filters]);
 
   useEffect(() => {
     const timeout = setTimeout(fetchCustoms, 300);

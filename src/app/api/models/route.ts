@@ -6,11 +6,48 @@ import { jsonSuccess, jsonError, requireRole, logAudit } from "@/lib/api-utils";
 import { createModelSchema } from "@/lib/validations/model";
 
 // GET /api/models — list with search + pagination
+// ?assigned=true → chatters get only their assigned models (lightweight)
 export async function GET(req: NextRequest) {
+  const { searchParams } = req.nextUrl;
+  const assigned = searchParams.get("assigned") === "true";
+
+  // Lightweight endpoint: return only models assigned to current chatter
+  if (assigned) {
+    const { error, session } = await requireRole(
+      Role.OWNER, Role.ADMIN, Role.CHATTER_MANAGER, Role.CHATTER
+    );
+    if (error) return error;
+
+    const role = session!.user.role;
+
+    // Admins/owners/managers see all models
+    if (role === "OWNER" || role === "ADMIN" || role === "CHATTER_MANAGER") {
+      const models = await prisma.modelProfile.findMany({
+        select: { id: true, stageName: true },
+        orderBy: { stageName: "asc" },
+      });
+      return jsonSuccess({ models });
+    }
+
+    // Chatters see only assigned models
+    const chatterProfile = await prisma.chatterProfile.findUnique({
+      where: { userId: session!.user.id },
+      select: { id: true },
+    });
+    if (!chatterProfile) return jsonError("Profil chatter introuvable", 404);
+
+    const assignments = await prisma.chatterAssignment.findMany({
+      where: { chatterId: chatterProfile.id, isActive: true },
+      include: { model: { select: { id: true, stageName: true } } },
+    });
+    const models = assignments.map((a) => a.model);
+    return jsonSuccess({ models });
+  }
+
+  // Full endpoint: admin only
   const { error, session } = await requireRole(Role.OWNER, Role.ADMIN);
   if (error) return error;
 
-  const { searchParams } = req.nextUrl;
   const search = searchParams.get("search") || "";
   const page = parseInt(searchParams.get("page") || "1");
   const limit = parseInt(searchParams.get("limit") || "20");
