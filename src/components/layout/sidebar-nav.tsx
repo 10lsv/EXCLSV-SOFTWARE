@@ -19,6 +19,7 @@ import {
   Clock,
   Receipt,
   Bell,
+  User,
   type LucideIcon,
 } from "lucide-react";
 
@@ -71,6 +72,7 @@ const navByRole: Record<Role, NavItem[]> = {
     { label: "Customs", href: "/model/customs", icon: FileText },
     { label: "Contenu", href: "/model/content", icon: Film },
     { label: "Factures", href: "/model/invoices", icon: Receipt },
+    { label: "Mon Profil", href: "/model/profile", icon: User },
     { label: "Notifications", href: "/model/notifications", icon: Bell },
   ],
 };
