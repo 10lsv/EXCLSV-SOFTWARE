@@ -33,19 +33,62 @@ export function usePushNotifications() {
 
     if (!isSupported) return;
 
-    // Check if already subscribed
+    // Permission already granted — auto-subscribe if no existing subscription
     if (Notification.permission === "granted") {
-      navigator.serviceWorker.getRegistration("/sw.js").then((reg) => {
-        if (reg) {
-          reg.pushManager.getSubscription().then((sub) => {
-            setSubscribed(!!sub);
+      (async () => {
+        try {
+          const registration = await navigator.serviceWorker.register("/sw.js");
+          await navigator.serviceWorker.ready;
+          const existingSub = await registration.pushManager.getSubscription();
+
+          if (existingSub) {
+            console.log("[Push] Already subscribed:", existingSub.endpoint.substring(0, 50));
+            setSubscribed(true);
+            return;
+          }
+
+          // No subscription yet — auto-subscribe
+          const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+          console.log("[Push] VAPID key:", vapidKey ? "présente" : "MANQUANTE");
+          if (!vapidKey) {
+            console.error("[Push] NEXT_PUBLIC_VAPID_PUBLIC_KEY is missing — cannot auto-subscribe");
+            return;
+          }
+
+          console.log("[Push] Auto-subscribing (permission already granted)");
+          const subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
           });
+          console.log("[Push] Subscription created:", subscription.endpoint.substring(0, 50));
+
+          const subJson = subscription.toJSON();
+          const res = await fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              endpoint: subJson.endpoint,
+              keys: {
+                p256dh: subJson.keys?.p256dh,
+                auth: subJson.keys?.auth,
+              },
+            }),
+          });
+          console.log("[Push] Auto-subscribe response:", res.status);
+
+          if (res.ok) {
+            setSubscribed(true);
+          } else {
+            console.error("[Push] Auto-subscribe failed:", res.status);
+          }
+        } catch (err) {
+          console.error("[Push] Auto-subscribe error:", err);
         }
-      });
+      })();
       return;
     }
 
-    // Check if dismissed recently
+    // Permission not yet asked — show banner
     if (Notification.permission === "default") {
       const dismissed = localStorage.getItem(DISMISS_KEY);
       if (dismissed) {
