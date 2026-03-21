@@ -37,9 +37,8 @@ export async function GET(req: NextRequest) {
     status: s.status,
     tags: s.tags,
     model: s.model,
-    stepsCount: s._count.steps,
-    contentTotal: s._count.contentTasks,
-    contentDone: s.contentTasks.filter((t) => t.status === "COMPLETED").length,
+    _count: s._count,
+    completedContentTasks: s.contentTasks.filter((t) => t.status === "COMPLETED").length,
     createdAt: s.createdAt,
     updatedAt: s.updatedAt,
   }));

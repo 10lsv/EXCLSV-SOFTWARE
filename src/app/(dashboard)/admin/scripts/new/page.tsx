@@ -79,26 +79,31 @@ export default function AdminScriptsNewPage() {
     setLoading(true);
     setError("");
 
-    const res = await fetch("/api/scripts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: name.trim(),
-        modelId,
-        category,
-        description: description.trim() || undefined,
-        targetPrice: targetPrice ? parseFloat(targetPrice) : undefined,
-      }),
-    });
+    try {
+      const res = await fetch("/api/scripts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          modelId,
+          category,
+          description: description.trim() || undefined,
+          targetPrice: targetPrice ? parseFloat(targetPrice) : undefined,
+        }),
+      });
 
-    const json = await res.json();
-    if (!json.success) {
-      setError(json.error || "Erreur lors de la création");
+      const json = await res.json();
+      if (!json.success) {
+        setError(json.error || "Erreur lors de la création");
+        setLoading(false);
+        return;
+      }
+
+      router.push(`/admin/scripts/${json.data.id}`);
+    } catch {
+      setError("Erreur réseau");
       setLoading(false);
-      return;
     }
-
-    router.push(`/admin/scripts/${json.data.id}`);
   }
 
   return (

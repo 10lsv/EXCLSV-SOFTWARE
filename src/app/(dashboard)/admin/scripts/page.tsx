@@ -85,15 +85,19 @@ export default function AdminScriptsPage() {
 
   const fetchScripts = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams();
-    if (filterModel) params.set("modelId", filterModel);
-    if (filterCategory) params.set("category", filterCategory);
-    if (filterStatus) params.set("status", filterStatus);
+    try {
+      const params = new URLSearchParams();
+      if (filterModel) params.set("modelId", filterModel);
+      if (filterCategory) params.set("category", filterCategory);
+      if (filterStatus) params.set("status", filterStatus);
 
-    const res = await fetch(`/api/scripts?${params}`);
-    const json = await res.json();
-    if (json.success) {
-      setScripts(json.data);
+      const res = await fetch(`/api/scripts?${params}`);
+      const json = await res.json();
+      if (json.success) {
+        setScripts(json.data);
+      }
+    } catch {
+      // ignore
     }
     setLoading(false);
   }, [filterModel, filterCategory, filterStatus]);

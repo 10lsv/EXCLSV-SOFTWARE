@@ -44,10 +44,14 @@ export default function ModelScriptsPage() {
 
   const fetchScripts = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/scripts/my");
-    const json = await res.json();
-    if (json.success) {
-      setScripts(json.data);
+    try {
+      const res = await fetch("/api/scripts/my");
+      const json = await res.json();
+      if (json.success) {
+        setScripts(json.data);
+      }
+    } catch {
+      // ignore
     }
     setLoading(false);
   }, []);
