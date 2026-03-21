@@ -64,7 +64,7 @@ const navByRole: Record<Role, NavCategory[]> = {
     {
       label: "Opérations",
       items: [
-        { label: "Planning", href: "/admin/planning", icon: Clock, soon: true },
+        { label: "Planning", href: "/admin/planning", icon: Clock },
         { label: "Finance", href: "/admin/finance", icon: DollarSign, soon: true },
         { label: "Réseaux sociaux", href: "/admin/social", icon: Share2, soon: true },
       ],
@@ -103,7 +103,7 @@ const navByRole: Record<Role, NavCategory[]> = {
     {
       label: "Opérations",
       items: [
-        { label: "Planning", href: "/admin/planning", icon: Clock, soon: true },
+        { label: "Planning", href: "/admin/planning", icon: Clock },
         { label: "Finance", href: "/admin/finance", icon: DollarSign, soon: true },
         { label: "Réseaux sociaux", href: "/admin/social", icon: Share2, soon: true },
       ],
@@ -130,6 +130,7 @@ const navByRole: Record<Role, NavCategory[]> = {
       label: "Général",
       items: [
         { label: "Tableau de bord", href: "/chatter/dashboard", icon: LayoutDashboard },
+        { label: "Mon planning", href: "/chatter/planning", icon: Clock },
         { label: "Messages", href: "/chatter/messages", icon: MessageSquare, badge: "messages" },
         { label: "Notifications", href: "/chatter/notifications", icon: Bell, badge: "notif" },
       ],

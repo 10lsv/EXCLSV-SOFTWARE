@@ -35,12 +35,6 @@ enum ContentType {
   COMBO
 }
 
-enum ShiftSlot {
-  SHIFT_A // 12h-20h
-  SHIFT_B // 20h-04h
-  SHIFT_C // 04h-08h
-}
-
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -55,6 +49,9 @@ model User {
   chatterProfile    ChatterProfile?
   auditLogs         AuditLog[]
   pushSubscriptions PushSubscription[]
+  shifts            ShiftSchedule[]  @relation("ChatterShifts")
+  clockRecords      ClockRecord[]    @relation("ChatterClocks")
+  clockTickets      ClockTicket[]    @relation("ChatterTickets")
 }
 
 model ModelProfile {
@@ -134,8 +131,6 @@ model ChatterProfile {
   driveLink      String?
 
   assignments ChatterAssignment[]
-  shifts      ShiftSchedule[]
-  clockIns    ClockRecord[]
   customs     CustomContent[]
 
   createdAt DateTime @default(now())
@@ -298,33 +293,58 @@ model ScriptMedia {
 }
 
 model ShiftSchedule {
-  id        String         @id @default(cuid())
+  id        String   @id @default(cuid())
   chatterId String
-  chatter   ChatterProfile @relation(fields: [chatterId], references: [id])
-
-  date    DateTime
-  slot    ShiftSlot
-  modelId String
-
+  chatter   User     @relation("ChatterShifts", fields: [chatterId], references: [id], onDelete: Cascade)
+  shiftDate DateTime
+  shiftType String
+  note      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([chatterId, date, slot])
+  @@unique([chatterId, shiftDate])
+  @@index([shiftDate])
+  @@index([chatterId])
 }
 
 model ClockRecord {
-  id        String         @id @default(cuid())
-  chatterId String
-  chatter   ChatterProfile @relation(fields: [chatterId], references: [id])
-
+  id          String    @id @default(cuid())
+  chatterId   String
+  chatter     User      @relation("ChatterClocks", fields: [chatterId], references: [id], onDelete: Cascade)
   shiftDate   DateTime
-  shiftSlot   ShiftSlot
+  shiftType   String
   clockIn     DateTime
   clockOut    DateTime?
-  hoursWorked Float?
+  autoCloseAt DateTime?
+  source      String    @default("MANUAL")
+  ticketId    String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  @@unique([chatterId, shiftDate])
+  @@index([shiftDate])
+  @@index([chatterId])
+}
+
+model ClockTicket {
+  id               String    @id @default(cuid())
+  chatterId        String
+  chatter          User      @relation("ChatterTickets", fields: [chatterId], references: [id], onDelete: Cascade)
+  shiftDate        DateTime
+  shiftType        String
+  screenshotData   String?
+  comment          String?
+  status           String    @default("PENDING")
+  adminId          String?
+  adminComment     String?
+  adjustedClockIn  DateTime?
+  adjustedClockOut DateTime?
+  resolvedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([chatterId])
+  @@index([status])
 }
 
 model InflowwDailyData {
