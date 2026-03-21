@@ -1,0 +1,2 @@
+ALTER TABLE "Script" ADD COLUMN IF NOT EXISTS "driveFolder" TEXT;
+ALTER TABLE "ScriptMedia" DROP COLUMN IF EXISTS "driveLink";

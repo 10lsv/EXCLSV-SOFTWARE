@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { name, modelId, category, description, tags } = body;
+    const { name, modelId, category, description, driveFolder, tags } = body;
 
     if (!name || !modelId || !category) {
       return jsonError("name, modelId et category requis");
@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
         modelId,
         category,
         description: description || null,
+        driveFolder: driveFolder || null,
         tags: tags || [],
       },
     });

@@ -239,6 +239,7 @@ model Script {
   model       ModelProfile @relation(fields: [modelId], references: [id], onDelete: Cascade)
   category    String       // UPSELL, SEXTING, RETENTION, FIRST_MESSAGE, MASS_DM, CUSTOM_PROMO
   description String?
+  driveFolder String?
   tags        String[]     @default([])
   status      String       @default("DRAFT") // DRAFT | VALIDATED
   steps       ScriptStep[]
@@ -285,7 +286,6 @@ model ScriptMedia {
   outfit      String?
   duration    String?
   status      String        @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | COMPLETED
-  driveLink   String?
   order       Int           @default(0)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt

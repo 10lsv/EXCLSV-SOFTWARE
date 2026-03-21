@@ -42,6 +42,7 @@ export default function AdminScriptsNewPage() {
   const [modelId, setModelId] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
+  const [driveFolder, setDriveFolder] = useState("");
   const [tags, setTags] = useState("");
 
   const fetchModels = useCallback(async () => {
@@ -97,6 +98,7 @@ export default function AdminScriptsNewPage() {
           modelId,
           category,
           description: description.trim() || undefined,
+          driveFolder: driveFolder.trim() || undefined,
           tags: parsedTags.length > 0 ? parsedTags : undefined,
         }),
       });
@@ -210,6 +212,18 @@ export default function AdminScriptsNewPage() {
                 onChange={(e) => setDescription(e.target.value)}
                 rows={4}
               />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Dossier Google Drive</label>
+              <Input
+                placeholder="https://drive.google.com/drive/folders/..."
+                value={driveFolder}
+                onChange={(e) => setDriveFolder(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Lien vers le dossier partagé pour déposer les contenus
+              </p>
             </div>
 
             <div className="space-y-2">

@@ -58,6 +58,7 @@ export async function PATCH(
         ...(body.name !== undefined && { name: body.name }),
         ...(body.category !== undefined && { category: body.category }),
         ...(body.description !== undefined && { description: body.description }),
+        ...(body.driveFolder !== undefined && { driveFolder: body.driveFolder || null }),
         ...(body.tags !== undefined && { tags: body.tags }),
         ...(body.status !== undefined && { status: body.status }),
       },
