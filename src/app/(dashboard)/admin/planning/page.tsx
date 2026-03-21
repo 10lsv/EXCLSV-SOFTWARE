@@ -171,13 +171,14 @@ export default function AdminPlanningPage() {
         `/api/planning?weekStart=${monday.toISOString()}`
       );
       const json = await res.json();
+      const d = json.data || json;
       setData({
-        shifts: json.shifts ?? [],
-        clocks: json.clocks ?? [],
-        chatters: json.chatters ?? [],
-        models: json.models ?? [],
-        assignments: json.assignments ?? {},
-        weekStart: json.weekStart ?? monday.toISOString(),
+        shifts: d.shifts ?? [],
+        clocks: d.clocks ?? [],
+        chatters: d.chatters ?? [],
+        models: d.models ?? [],
+        assignments: d.assignments ?? {},
+        weekStart: d.weekStart ?? monday.toISOString(),
       });
     } catch {
       // erreur silencieuse
