@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
 import { jsonSuccess, jsonError, requireRole } from "@/lib/api-utils";
 
+// TODO: restrict clock-in/out to shift window
 export async function POST(_req: NextRequest) {
   const { error, session } = await requireRole(Role.CHATTER);
   if (error) return error;

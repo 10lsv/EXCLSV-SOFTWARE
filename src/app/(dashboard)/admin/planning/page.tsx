@@ -18,6 +18,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
   ChevronLeft,
@@ -29,6 +31,8 @@ import {
   BarChart3,
   Trash2,
   Loader2,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import { cn, getMondayUTC } from "@/lib/utils";
 import {
@@ -147,6 +151,14 @@ export default function AdminPlanningPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editShift, setEditShift] = useState<PlanningShift | null>(null);
   const [editLoading, setEditLoading] = useState(false);
+
+  // Ticket resolution
+  const [resolvingTicketId, setResolvingTicketId] = useState<string | null>(null);
+  const [resolveMode, setResolveMode] = useState<"approve" | "reject" | null>(null);
+  const [resolveClockIn, setResolveClockIn] = useState("");
+  const [resolveClockOut, setResolveClockOut] = useState("");
+  const [resolveComment, setResolveComment] = useState("");
+  const [resolveLoading, setResolveLoading] = useState(false);
 
   /* --- Computed dates --- */
   const monday = useMemo(() => {
@@ -376,6 +388,71 @@ export default function AdminPlanningPage() {
   /* --- Tickets --- */
   const pendingTickets = tickets.filter((t) => t.status === "PENDING");
   const resolvedTickets = tickets.filter((t) => t.status !== "PENDING");
+
+  function getTheoreticalTimes(ticket: Ticket) {
+    const dateStr = ticket.shiftDate.slice(0, 10);
+    const shift = SHIFTS[ticket.shiftType];
+    if (!shift) return { clockIn: "", clockOut: "" };
+    const startH = shift.start.toString().padStart(2, "0");
+    const endH = shift.end.toString().padStart(2, "0");
+    return {
+      clockIn: `${dateStr}T${startH}:00`,
+      clockOut: shift.end > shift.start
+        ? `${dateStr}T${endH}:00`
+        : `${format(addDays(new Date(dateStr), 1), "yyyy-MM-dd")}T${endH}:00`,
+    };
+  }
+
+  function openResolve(ticket: Ticket, mode: "approve" | "reject") {
+    setResolvingTicketId(ticket.id);
+    setResolveMode(mode);
+    setResolveComment("");
+    if (mode === "approve") {
+      const times = getTheoreticalTimes(ticket);
+      setResolveClockIn(times.clockIn);
+      setResolveClockOut(times.clockOut);
+    }
+  }
+
+  function cancelResolve() {
+    setResolvingTicketId(null);
+    setResolveMode(null);
+    setResolveClockIn("");
+    setResolveClockOut("");
+    setResolveComment("");
+  }
+
+  async function handleResolveSubmit() {
+    if (!resolvingTicketId || !resolveMode) return;
+    if (resolveMode === "reject" && !resolveComment.trim()) return;
+    setResolveLoading(true);
+    try {
+      const payload: Record<string, unknown> = {
+        status: resolveMode === "approve" ? "APPROVED" : "REJECTED",
+      };
+      if (resolveMode === "approve") {
+        payload.adjustedClockIn = new Date(resolveClockIn).toISOString();
+        payload.adjustedClockOut = resolveClockOut
+          ? new Date(resolveClockOut).toISOString()
+          : undefined;
+      }
+      if (resolveComment.trim()) {
+        payload.adminComment = resolveComment.trim();
+      }
+      const res = await fetch(`/api/clock/tickets/${resolvingTicketId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        cancelResolve();
+        await fetchTickets();
+      }
+    } catch {
+      // erreur silencieuse
+    }
+    setResolveLoading(false);
+  }
 
   /* ---------- Render ---------- */
   return (
@@ -889,41 +966,152 @@ export default function AdminPlanningPage() {
         )}
 
         <div className="grid gap-3">
-          {pendingTickets.map((ticket) => (
-            <Card key={ticket.id} className="border-l-4 border-l-orange-400">
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <Avatar className="h-8 w-8 shrink-0">
-                    {ticket.chatter?.avatar ? (
-                      <AvatarImage
-                        src={ticket.chatter.avatar}
-                        alt={ticket.chatter.name}
-                      />
-                    ) : null}
-                    <AvatarFallback className="text-xs">
-                      {(ticket.chatter?.name ?? "C").charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="text-sm font-medium">
-                      {ticket.chatter?.name ?? "Chatter"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {ticket.shiftDate
-                        ? format(new Date(ticket.shiftDate), "d MMMM yyyy", {
-                            locale: fr,
-                          })
-                        : ""}{" "}
-                      — {SHIFTS[ticket.shiftType]?.label ?? ticket.shiftType}
-                    </p>
-                    {ticket.comment && (
-                      <p className="mt-1 text-sm">{ticket.comment}</p>
-                    )}
+          {pendingTickets.map((ticket) => {
+            const isResolving = resolvingTicketId === ticket.id;
+            return (
+              <Card key={ticket.id} className="border-l-4 border-l-orange-400">
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <Avatar className="h-8 w-8 shrink-0">
+                      {ticket.chatter?.avatar ? (
+                        <AvatarImage
+                          src={ticket.chatter.avatar}
+                          alt={ticket.chatter.name}
+                        />
+                      ) : null}
+                      <AvatarFallback className="text-xs">
+                        {(ticket.chatter?.name ?? "C").charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">
+                        {ticket.chatter?.name ?? "Chatter"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {ticket.shiftDate
+                          ? format(new Date(ticket.shiftDate), "d MMMM yyyy", {
+                              locale: fr,
+                            })
+                          : ""}{" "}
+                        — {SHIFTS[ticket.shiftType]?.label ?? ticket.shiftType}
+                      </p>
+                      {ticket.comment && (
+                        <p className="mt-1 text-sm">{ticket.comment}</p>
+                      )}
+
+                      {/* Action buttons */}
+                      {!isResolving && (
+                        <div className="flex gap-2 mt-3">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-emerald-600 border-emerald-300 hover:bg-emerald-50"
+                            onClick={() => openResolve(ticket, "approve")}
+                          >
+                            <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
+                            Approuver
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-red-600 border-red-300 hover:bg-red-50"
+                            onClick={() => openResolve(ticket, "reject")}
+                          >
+                            <XCircle className="mr-1.5 h-3.5 w-3.5" />
+                            Rejeter
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Approve form */}
+                      {isResolving && resolveMode === "approve" && (
+                        <div className="mt-3 space-y-3 rounded-md border p-3 bg-emerald-50/50">
+                          <p className="text-sm font-medium text-emerald-700">
+                            Ajuster les horaires de pointage
+                          </p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Arrivée</Label>
+                              <Input
+                                type="datetime-local"
+                                value={resolveClockIn}
+                                onChange={(e) => setResolveClockIn(e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Départ</Label>
+                              <Input
+                                type="datetime-local"
+                                value={resolveClockOut}
+                                onChange={(e) => setResolveClockOut(e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={handleResolveSubmit}
+                              disabled={resolveLoading || !resolveClockIn}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                            >
+                              {resolveLoading && (
+                                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                              )}
+                              Confirmer l&apos;approbation
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={cancelResolve}
+                              disabled={resolveLoading}
+                            >
+                              Annuler
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Reject form */}
+                      {isResolving && resolveMode === "reject" && (
+                        <div className="mt-3 space-y-3 rounded-md border p-3 bg-red-50/50">
+                          <p className="text-sm font-medium text-red-700">
+                            Motif du rejet
+                          </p>
+                          <Textarea
+                            value={resolveComment}
+                            onChange={(e) => setResolveComment(e.target.value)}
+                            placeholder="Expliquez la raison du rejet..."
+                            rows={2}
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={handleResolveSubmit}
+                              disabled={resolveLoading || !resolveComment.trim()}
+                              className="bg-red-600 hover:bg-red-700 text-white"
+                            >
+                              {resolveLoading && (
+                                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                              )}
+                              Confirmer le rejet
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={cancelResolve}
+                              disabled={resolveLoading}
+                            >
+                              Annuler
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
 
         {/* Tickets resolus */}

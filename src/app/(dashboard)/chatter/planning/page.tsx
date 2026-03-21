@@ -61,6 +61,32 @@ interface ClockRecord {
   source?: string;
 }
 
+interface MyShift {
+  id: string;
+  shiftDate: string;
+  shiftType: ShiftType;
+  model?: { id: string; stageName: string } | null;
+}
+
+/* ---------- Image compression ---------- */
+
+async function compressImage(file: File, maxWidth = 800, quality = 0.6): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ratio = Math.min(maxWidth / img.width, 1);
+      canvas.width = img.width * ratio;
+      canvas.height = img.height * ratio;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 interface Ticket {
   id: string;
   shiftDate: string;
@@ -105,11 +131,15 @@ export default function ChatterPlanningPage() {
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // My shifts for week view
+  const [myShifts, setMyShifts] = useState<MyShift[]>([]);
+
   // Ticket dialog
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [ticketDate, setTicketDate] = useState("");
   const [ticketShiftType, setTicketShiftType] = useState("");
   const [ticketComment, setTicketComment] = useState("");
+  const [ticketScreenshot, setTicketScreenshot] = useState<string | null>(null);
   const [ticketLoading, setTicketLoading] = useState(false);
 
   // Clock action loading
@@ -144,20 +174,6 @@ export default function ChatterPlanningPage() {
     }
   }, []);
 
-  const fetchRecords = useCallback(async () => {
-    try {
-      const res = await fetch(
-        `/api/clock/records?weekStart=${monday.toISOString()}`
-      );
-      const json = await res.json();
-      if (json.success !== false) {
-        setRecords(json.data ?? json.records ?? []);
-      }
-    } catch {
-      // ignore
-    }
-  }, [monday]);
-
   const fetchTickets = useCallback(async () => {
     try {
       const res = await fetch("/api/clock/tickets");
@@ -170,14 +186,31 @@ export default function ChatterPlanningPage() {
     }
   }, []);
 
+  const fetchMyShifts = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/planning/my?weekStart=${monday.toISOString()}`
+      );
+      const json = await res.json();
+      if (json.success !== false) {
+        const d = json.data ?? json;
+        setMyShifts(d.shifts ?? []);
+        // Also use clocks from this endpoint for week records
+        if (d.clocks) setRecords(d.clocks);
+      }
+    } catch {
+      // ignore
+    }
+  }, [monday]);
+
   useEffect(() => {
     async function init() {
       setLoading(true);
-      await Promise.all([fetchClockStatus(), fetchRecords(), fetchTickets()]);
+      await Promise.all([fetchClockStatus(), fetchMyShifts(), fetchTickets()]);
       setLoading(false);
     }
     init();
-  }, [fetchClockStatus, fetchRecords, fetchTickets]);
+  }, [fetchClockStatus, fetchMyShifts, fetchTickets]);
 
   // Poll clock status every 10s
   useEffect(() => {
@@ -226,7 +259,7 @@ export default function ChatterPlanningPage() {
     setClockActionLoading(true);
     try {
       await fetch("/api/clock/out", { method: "POST" });
-      await Promise.all([fetchClockStatus(), fetchRecords()]);
+      await Promise.all([fetchClockStatus(), fetchMyShifts()]);
     } catch {
       // ignore
     }
@@ -234,6 +267,17 @@ export default function ChatterPlanningPage() {
   }
 
   /* --- Ticket submission --- */
+
+  async function handleScreenshotChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await compressImage(file);
+      setTicketScreenshot(compressed);
+    } catch {
+      // ignore
+    }
+  }
 
   async function handleTicketSubmit() {
     if (!ticketDate || !ticketShiftType) return;
@@ -245,6 +289,7 @@ export default function ChatterPlanningPage() {
         body: JSON.stringify({
           shiftDate: ticketDate,
           shiftType: ticketShiftType,
+          screenshotData: ticketScreenshot || undefined,
           comment: ticketComment || undefined,
         }),
       });
@@ -252,6 +297,7 @@ export default function ChatterPlanningPage() {
       setTicketDate("");
       setTicketShiftType("");
       setTicketComment("");
+      setTicketScreenshot(null);
       await fetchTickets();
     } catch {
       // ignore
@@ -266,9 +312,14 @@ export default function ChatterPlanningPage() {
     return records.find((r) => r.shiftDate.startsWith(dayStr));
   }
 
+  function getShiftForDay(day: Date): MyShift | undefined {
+    const dayStr = format(day, "yyyy-MM-dd");
+    return myShifts.find((s) => s.shiftDate.startsWith(dayStr));
+  }
+
   /* --- Week stats --- */
   const weekStats = useMemo(() => {
-    const shiftCount = records.length;
+    const shiftCount = myShifts.length;
     const clockedHours = records.reduce((sum, r) => {
       if (!r.clockIn) return sum;
       const start = new Date(r.clockIn).getTime();
@@ -277,7 +328,7 @@ export default function ChatterPlanningPage() {
       return sum + (end - start) / 3_600_000;
     }, 0);
     return { shiftCount, clockedHours };
-  }, [records]);
+  }, [myShifts, records]);
 
   /* ---------- Render ---------- */
 
@@ -382,10 +433,12 @@ export default function ChatterPlanningPage() {
       <div className="space-y-3">
         {days.map((day) => {
           const record = getRecordForDay(day);
+          const shift = getShiftForDay(day);
           const isToday = isSameDay(day, today);
           const isPast =
             !isToday &&
             isBefore(startOfDay(day), startOfDay(today));
+          const hasShift = isToday ? hasShiftToday : !!shift;
 
           return (
             <Card
@@ -417,26 +470,22 @@ export default function ChatterPlanningPage() {
                       </Badge>
                     )}
 
-                    {isToday && !hasShiftToday && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Repos
-                      </p>
-                    )}
-
-                    {/* Other days: use records */}
-                    {!isToday && record && (
+                    {/* Other days: use shift data from /api/planning/my */}
+                    {!isToday && shift && (
                       <Badge
                         className={cn(
                           "mt-1 text-white text-xs",
-                          SHIFT_BG[record.shiftType]
+                          SHIFT_BG[shift.shiftType]
                         )}
                       >
-                        {SHIFTS[record.shiftType].label} ·{" "}
-                        {SHIFT_LABELS[record.shiftType]}
+                        {SHIFTS[shift.shiftType].label} ·{" "}
+                        {SHIFT_LABELS[shift.shiftType]}
+                        {shift.model && ` · ${shift.model.stageName}`}
                       </Badge>
                     )}
 
-                    {!isToday && !record && (
+                    {/* No shift = repos */}
+                    {!hasShift && (
                       <p className="text-xs text-muted-foreground mt-1">
                         Repos
                       </p>
@@ -447,7 +496,7 @@ export default function ChatterPlanningPage() {
                     {/* Today clock info */}
                     {isToday && isShiftDone && clockStatus?.clock && (
                       <p className="text-xs text-emerald-600 font-medium">
-                        Pointe{" "}
+                        Pointé{" "}
                         {formatHourFromDate(
                           new Date(clockStatus.clock.clockIn)
                         )}{" "}
@@ -464,10 +513,10 @@ export default function ChatterPlanningPage() {
                       </p>
                     )}
 
-                    {/* Past days with record */}
+                    {/* Other days with record */}
                     {!isToday && record && record.clockOut && (
                       <p className="text-xs text-muted-foreground">
-                        Pointe{" "}
+                        Pointé{" "}
                         {formatHourFromDate(new Date(record.clockIn))} →{" "}
                         {formatHourFromDate(new Date(record.clockOut))}{" "}
                         (
@@ -485,10 +534,10 @@ export default function ChatterPlanningPage() {
                       </p>
                     )}
 
-                    {/* Past days without record & had shift (we don't know from records alone, so show for all past without record) */}
-                    {isPast && !record && (
+                    {/* Past days with shift but no clock record */}
+                    {isPast && hasShift && !record && (
                       <p className="text-xs text-red-500 font-medium">
-                        Non pointe
+                        Non pointé
                       </p>
                     )}
                   </div>
@@ -554,6 +603,27 @@ export default function ChatterPlanningPage() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Capture d&apos;écran (optionnel)</Label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleScreenshotChange}
+                  className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
+                />
+                {ticketScreenshot && (
+                  <div className="mt-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={ticketScreenshot}
+                      alt="Aperçu capture"
+                      className="rounded border"
+                      style={{ maxHeight: 120 }}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
