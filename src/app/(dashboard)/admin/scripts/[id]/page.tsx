@@ -211,13 +211,12 @@ export default function AdminScriptDetailPage() {
   // Add element dropdown
   const [addElementStepId, setAddElementStepId] = useState<string | null>(null);
 
-  // Add media dialog
+  // Add media dialog (multi-row)
   const [mediaDialogOpen, setMediaDialogOpen] = useState(false);
   const [mediaElementId, setMediaElementId] = useState<string | null>(null);
-  const [mediaType, setMediaType] = useState("PHOTO");
-  const [mediaDescription, setMediaDescription] = useState("");
-  const [mediaOutfit, setMediaOutfit] = useState("");
-  const [mediaDuration, setMediaDuration] = useState("");
+  const [mediaRows, setMediaRows] = useState<Array<{ mediaType: string; description: string; outfit: string; duration: string }>>([
+    { mediaType: "PHOTO", description: "", outfit: "", duration: "" },
+  ]);
   const [mediaCreating, setMediaCreating] = useState(false);
 
   // ——— Data fetching ———
@@ -389,26 +388,40 @@ export default function AdminScriptDetailPage() {
 
   function openMediaDialog(elementId: string) {
     setMediaElementId(elementId);
-    setMediaType("PHOTO");
-    setMediaDescription("");
-    setMediaOutfit("");
-    setMediaDuration("");
+    setMediaRows([{ mediaType: "PHOTO", description: "", outfit: "", duration: "" }]);
     setMediaDialogOpen(true);
+  }
+
+  function updateMediaRow(index: number, field: string, value: string) {
+    setMediaRows((prev) => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)));
+  }
+
+  function addMediaRow() {
+    setMediaRows((prev) => [...prev, { mediaType: "PHOTO", description: "", outfit: "", duration: "" }]);
+  }
+
+  function removeMediaRow(index: number) {
+    if (mediaRows.length <= 1) return;
+    setMediaRows((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function handleAddMedia(e: React.FormEvent) {
     e.preventDefault();
-    if (!mediaElementId || !mediaDescription.trim()) return;
+    if (!mediaElementId) return;
+    const valid = mediaRows.filter((r) => r.description.trim());
+    if (valid.length === 0) return;
     setMediaCreating(true);
     try {
-      const res = await fetch(`/api/scripts/elements/${mediaElementId}/medias`, {
+      const res = await fetch(`/api/scripts/elements/${mediaElementId}/medias/batch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mediaType: mediaType,
-          description: mediaDescription.trim(),
-          outfit: mediaOutfit.trim() || undefined,
-          duration: mediaDuration.trim() || undefined,
+          medias: valid.map((r) => ({
+            mediaType: r.mediaType,
+            description: r.description.trim(),
+            outfit: r.outfit.trim() || undefined,
+            duration: r.duration.trim() || undefined,
+          })),
         }),
       });
       const json = await res.json();
@@ -417,7 +430,7 @@ export default function AdminScriptDetailPage() {
         fetchScript();
       }
     } catch (err) {
-      console.error("[Script] Erreur ajout média:", err);
+      console.error("[Script] Erreur ajout médias:", err);
     }
     setMediaCreating(false);
   }
@@ -674,68 +687,80 @@ export default function AdminScriptDetailPage() {
 
       {/* Add Media Dialog */}
       <Dialog open={mediaDialogOpen} onOpenChange={setMediaDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Ajouter un média</DialogTitle>
+            <DialogTitle>Ajouter des médias</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleAddMedia} className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Type de média</label>
-              <Select value={mediaType} onValueChange={setMediaType}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PHOTO">Photo</SelectItem>
-                  <SelectItem value="VIDEO">Vidéo</SelectItem>
-                  <SelectItem value="AUDIO">Audio</SelectItem>
-                </SelectContent>
-              </Select>
+          <form onSubmit={handleAddMedia} className="space-y-3">
+            {/* Header labels */}
+            <div className="grid grid-cols-[5rem_1fr_8rem_7rem_2rem] gap-2 text-[10px] uppercase tracking-wider text-muted-foreground font-medium px-3">
+              <span>Type</span>
+              <span>Description *</span>
+              <span>Tenue</span>
+              <span>Durée</span>
+              <span />
             </div>
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Description <span className="text-destructive">*</span>
-              </label>
-              <Input
-                placeholder="Décrivez le contenu à produire..."
-                value={mediaDescription}
-                onChange={(e) => setMediaDescription(e.target.value)}
-                required
-              />
-            </div>
+            {/* Media rows */}
+            {mediaRows.map((row, i) => (
+              <div key={i} className="grid grid-cols-[5rem_1fr_8rem_7rem_2rem] gap-2 items-center bg-gray-50 dark:bg-gray-900/30 rounded-md py-2 px-3 group">
+                <select
+                  className="h-8 text-sm rounded border bg-background px-1.5"
+                  value={row.mediaType}
+                  onChange={(e) => updateMediaRow(i, "mediaType", e.target.value)}
+                >
+                  <option value="PHOTO">Photo</option>
+                  <option value="VIDEO">Vidéo</option>
+                  <option value="AUDIO">Audio</option>
+                </select>
+                <Input
+                  className="h-8 text-sm"
+                  placeholder="Nu sous la douche..."
+                  value={row.description}
+                  onChange={(e) => updateMediaRow(i, "description", e.target.value)}
+                  required
+                />
+                <Input
+                  className="h-8 text-sm"
+                  placeholder="Lingerie noire"
+                  value={row.outfit}
+                  onChange={(e) => updateMediaRow(i, "outfit", e.target.value)}
+                />
+                <Input
+                  className="h-8 text-sm"
+                  placeholder="30 sec"
+                  value={row.duration}
+                  onChange={(e) => updateMediaRow(i, "duration", e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeMediaRow(i)}
+                  className={cn(
+                    "h-8 w-8 flex items-center justify-center rounded text-muted-foreground hover:text-destructive transition-opacity",
+                    mediaRows.length <= 1 ? "opacity-0 pointer-events-none" : "opacity-0 group-hover:opacity-100"
+                  )}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
 
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Tenue</label>
-              <Input
-                placeholder="Ex: Lingerie noire"
-                value={mediaOutfit}
-                onChange={(e) => setMediaOutfit(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Durée</label>
-              <Input
-                placeholder="Ex: 30 secondes"
-                value={mediaDuration}
-                onChange={(e) => setMediaDuration(e.target.value)}
-              />
-            </div>
+            {/* Add row button */}
+            <button
+              type="button"
+              onClick={addMediaRow}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors pl-3"
+            >
+              + Ajouter un média
+            </button>
 
             <div className="flex justify-end gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setMediaDialogOpen(false)}
-              >
+              <Button type="button" variant="outline" onClick={() => setMediaDialogOpen(false)}>
                 Annuler
               </Button>
-              <Button type="submit" disabled={mediaCreating}>
-                {mediaCreating && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Ajouter
+              <Button type="submit" disabled={mediaCreating || mediaRows.filter((r) => r.description.trim()).length === 0}>
+                {mediaCreating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Ajouter {mediaRows.filter((r) => r.description.trim()).length} média{mediaRows.filter((r) => r.description.trim()).length > 1 ? "s" : ""}
               </Button>
             </div>
           </form>
