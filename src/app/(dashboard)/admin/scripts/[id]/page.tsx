@@ -41,6 +41,7 @@ import {
   Clock,
   StickyNote,
   ChevronDown,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -614,6 +615,9 @@ export default function AdminScriptDetailPage() {
         )}
       </div>
 
+      {/* ═══ Recap section ═══ */}
+      <MediaRecapSection script={script} onUpdate={fetchScript} />
+
       {/* Add Step Dialog */}
       <Dialog open={stepDialogOpen} onOpenChange={setStepDialogOpen}>
         <DialogContent>
@@ -1061,6 +1065,173 @@ function MediaList({
             </div>
           );
         })}
+    </div>
+  );
+}
+
+// ═══ Media Recap Section ═══
+
+interface FlatMedia {
+  mediaId: string;
+  stepOrder: number;
+  stepTitle: string;
+  elementType: string;
+  mediaType: string;
+  description: string;
+  outfit: string | null;
+  duration: string | null;
+  status: string;
+  driveLink: string | null;
+}
+
+function MediaRecapSection({
+  script,
+  onUpdate,
+}: {
+  script: {
+    steps: Array<{
+      order: number;
+      title: string;
+      elements: Array<{
+        type: string;
+        medias: Array<{
+          id: string;
+          mediaType: string;
+          description: string;
+          outfit?: string | null;
+          duration?: string | null;
+          status: string;
+          driveLink?: string | null;
+          order: number;
+        }>;
+      }>;
+    }>;
+  };
+  onUpdate: () => void;
+}) {
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [editingLink, setEditingLink] = useState<Record<string, string>>({});
+
+  const allMedias: FlatMedia[] = [];
+  for (const step of script.steps) {
+    for (const el of step.elements) {
+      if (el.type !== "FREE_CONTENT" && el.type !== "PAID_CONTENT") continue;
+      for (const media of el.medias) {
+        allMedias.push({
+          mediaId: media.id,
+          stepOrder: step.order,
+          stepTitle: step.title,
+          elementType: el.type,
+          mediaType: media.mediaType,
+          description: media.description,
+          outfit: media.outfit ?? null,
+          duration: media.duration ?? null,
+          status: media.status,
+          driveLink: media.driveLink ?? null,
+        });
+      }
+    }
+  }
+
+  const notStarted = allMedias.filter((m) => m.status === "NOT_STARTED").length;
+  const inProgress = allMedias.filter((m) => m.status === "IN_PROGRESS").length;
+  const completed = allMedias.filter((m) => m.status === "COMPLETED").length;
+  const total = allMedias.length;
+  const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const filtered = statusFilter === "ALL" ? allMedias : allMedias.filter((m) => m.status === statusFilter);
+
+  async function handleStatusChange(mediaId: string, status: string) {
+    try {
+      await fetch(`/api/scripts/medias/${mediaId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      onUpdate();
+    } catch { /* ignore */ }
+  }
+
+  async function handleDriveLinkSave(mediaId: string) {
+    const link = editingLink[mediaId];
+    if (link === undefined) return;
+    try {
+      await fetch(`/api/scripts/medias/${mediaId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ driveLink: link.trim() || null }),
+      });
+      setEditingLink((prev) => { const n = { ...prev }; delete n[mediaId]; return n; });
+      onUpdate();
+    } catch { /* ignore */ }
+  }
+
+  const ICONS: Record<string, string> = { PHOTO: "📷", VIDEO: "🎬", AUDIO: "🎤" };
+  const STC: Record<string, string> = { NOT_STARTED: "text-red-600", IN_PROGRESS: "text-orange-600", COMPLETED: "text-green-600" };
+
+  return (
+    <div className="space-y-4 mt-8">
+      <div className="flex items-center gap-3">
+        <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium shrink-0">Récapitulatif des contenus</span>
+        <div className="flex-1 h-px bg-gray-200 dark:bg-gray-800" />
+      </div>
+
+      {total === 0 ? (
+        <p className="text-sm text-muted-foreground text-center py-8">
+          Aucun contenu à produire — ajoutez des médias dans les étapes ci-dessus
+        </p>
+      ) : (
+        <>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden flex">
+              {notStarted > 0 && <div className="h-full bg-red-400" style={{ width: `${(notStarted / total) * 100}%` }} />}
+              {inProgress > 0 && <div className="h-full bg-orange-400" style={{ width: `${(inProgress / total) * 100}%` }} />}
+              {completed > 0 && <div className="h-full bg-green-500" style={{ width: `${(completed / total) * 100}%` }} />}
+            </div>
+            <span className="text-sm text-muted-foreground shrink-0">{completed}/{total} produits ({pct}%)</span>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {[
+              { key: "ALL", label: "Tous", count: total, cls: "" },
+              { key: "NOT_STARTED", label: "Non commencé", count: notStarted, cls: "text-red-600" },
+              { key: "IN_PROGRESS", label: "En cours", count: inProgress, cls: "text-orange-600" },
+              { key: "COMPLETED", label: "Terminé", count: completed, cls: "text-green-600" },
+            ].map((f) => (
+              <button key={f.key} onClick={() => setStatusFilter(f.key)} className={cn("rounded-full px-3 py-1 text-xs font-medium border transition-colors", statusFilter === f.key ? "bg-foreground text-background" : "hover:bg-muted", statusFilter !== f.key && f.cls)}>
+                {f.label} ({f.count})
+              </button>
+            ))}
+          </div>
+
+          <div className="rounded-lg border">
+            <div className="hidden md:grid grid-cols-12 gap-2 px-4 py-2.5 border-b text-xs uppercase tracking-wider text-muted-foreground font-medium">
+              <span className="col-span-2">Étape</span>
+              <span>Type</span>
+              <span className="col-span-3">Média</span>
+              <span>Tenue</span>
+              <span>Durée</span>
+              <span className="col-span-2">Statut</span>
+              <span className="col-span-2">Lien Drive</span>
+            </div>
+            {filtered.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">Aucun média avec ce filtre</p>
+            ) : filtered.map((m) => (
+              <div key={m.mediaId} className="grid grid-cols-1 md:grid-cols-12 gap-2 px-4 py-3 border-b last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-900 items-center">
+                <span className="col-span-2 text-xs text-muted-foreground">#{m.stepOrder + 1} {m.stepTitle}</span>
+                <span><Badge variant="secondary" className={cn("text-[10px]", m.elementType === "PAID_CONTENT" ? "bg-gray-900 text-white dark:bg-white dark:text-black" : "bg-emerald-100 text-emerald-700")}>{m.elementType === "PAID_CONTENT" ? "Payant" : "Gratuit"}</Badge></span>
+                <span className="col-span-3 flex items-center gap-1.5 text-sm font-medium"><span>{ICONS[m.mediaType] || "📁"}</span>{m.description}</span>
+                <span className="text-sm text-muted-foreground">{m.outfit || "—"}</span>
+                <span className="text-sm text-muted-foreground">{m.duration || "—"}</span>
+                <span className="col-span-2"><select className={cn("text-xs font-medium border rounded px-2 py-1 bg-background", STC[m.status])} value={m.status} onChange={(e) => handleStatusChange(m.mediaId, e.target.value)}><option value="NOT_STARTED">Non commencé</option><option value="IN_PROGRESS">En cours</option><option value="COMPLETED">Terminé</option></select></span>
+                <span className="col-span-2 flex items-center gap-1">
+                  <input className={cn("text-xs px-2 py-1 rounded w-full bg-background", m.driveLink && !(m.mediaId in editingLink) ? "border" : "border border-dashed border-gray-300")} placeholder="https://drive..." value={editingLink[m.mediaId] ?? m.driveLink ?? ""} onChange={(e) => setEditingLink((prev) => ({ ...prev, [m.mediaId]: e.target.value }))} onBlur={() => handleDriveLinkSave(m.mediaId)} onKeyDown={(e) => { if (e.key === "Enter") handleDriveLinkSave(m.mediaId); }} />
+                  {m.driveLink && !(m.mediaId in editingLink) && <a href={m.driveLink} target="_blank" rel="noopener noreferrer" className="shrink-0 text-muted-foreground hover:text-primary"><ExternalLink className="h-3.5 w-3.5" /></a>}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
