@@ -73,8 +73,8 @@ const CATEGORY_LABELS: Record<string, string> = {
 const CATEGORIES = Object.keys(CATEGORY_LABELS);
 
 function getCardBorder(s: ScriptListItem): string {
-  if (s.status === "DRAFT") return "border-l-4 border-l-gray-300 bg-gray-50/50 dark:bg-gray-900/20";
-  if (s.totalMedias > 0 && s.completedMedias === s.totalMedias) return "border-l-4 border-l-green-500 bg-green-50/30 dark:bg-green-950/10";
+  if (s.status === "DRAFT") return "border-l-4 border-l-gray-300";
+  if (s.totalMedias > 0 && s.completedMedias === s.totalMedias) return "border-l-4 border-l-green-500";
   return "border-l-4 border-l-blue-500";
 }
 
@@ -191,8 +191,8 @@ export default function AdminScriptsPage() {
         </Button>
       </div>
 
-      {/* KPI Cards — 6 cards, 2 rows */}
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
+      {/* KPI Cards — row 1: 5 cards */}
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -203,64 +203,94 @@ export default function AdminScriptsPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-green-200 bg-green-50/50 dark:bg-green-950/10">
+        <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-green-600 mb-1">
-              <CheckCircle2 className="h-4 w-4" />
-              <span className="text-xs font-medium uppercase tracking-wider">Prêts à l&apos;emploi</span>
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              <span className="text-xs font-medium uppercase tracking-wider">Prêts</span>
             </div>
             <p className="text-2xl font-bold text-green-600">{kpis.ready}</p>
           </CardContent>
         </Card>
 
-        <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/10">
+        <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-blue-600 mb-1">
-              <Clock className="h-4 w-4" />
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Clock className="h-4 w-4 text-blue-500" />
               <span className="text-xs font-medium uppercase tracking-wider">En production</span>
             </div>
             <p className="text-2xl font-bold text-blue-600">{kpis.inProd}</p>
           </CardContent>
         </Card>
 
-        <Card className="bg-gray-50/50 dark:bg-gray-900/20">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <FileEdit className="h-4 w-4" />
-              <span className="text-xs font-medium uppercase tracking-wider">Brouillons</span>
-            </div>
-            <p className="text-2xl font-bold text-gray-500">{kpis.drafts}</p>
-          </CardContent>
-        </Card>
-
-        <Card className={cn(
-          kpis.prodRate >= 80 ? "border-green-200 bg-green-50/50" :
-          kpis.prodRate >= 50 ? "border-orange-200 bg-orange-50/50" :
-          "border-red-200 bg-red-50/50"
-        )}>
+        <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <TrendingUp className="h-4 w-4" />
-              <span className="text-xs font-medium uppercase tracking-wider">Taux production</span>
+              <span className="text-xs font-medium uppercase tracking-wider">Production</span>
             </div>
-            <p className={cn(
-              "text-2xl font-bold",
-              kpis.prodRate >= 80 ? "text-green-600" : kpis.prodRate >= 50 ? "text-orange-600" : "text-red-600"
-            )}>
-              {kpis.prodRate}%
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-2xl font-bold">{kpis.prodRate}%</p>
+              <span className="text-xs text-muted-foreground">
+                {scripts.reduce((a, s) => a + s.completedMedias, 0)}/{scripts.reduce((a, s) => a + s.totalMedias, 0)}
+              </span>
+            </div>
+            <Progress value={kpis.prodRate} className="mt-2 h-1" />
           </CardContent>
         </Card>
 
-        <Card className="bg-black dark:bg-white">
+        <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-white/70 dark:text-black/70 mb-1">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <DollarSign className="h-4 w-4" />
-              <span className="text-xs font-medium uppercase tracking-wider">Revenus potentiels</span>
+              <span className="text-xs font-medium uppercase tracking-wider">Revenus</span>
             </div>
-            <p className="text-2xl font-bold text-white dark:text-black">
+            <p className="text-2xl font-bold text-green-600">
               {kpis.readyRevenue > 0 ? `$${kpis.readyRevenue.toLocaleString()}` : "$0"}
             </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Status cards — row 2: 3 cards */}
+      <div className="grid gap-3 grid-cols-3">
+        <Card className="border-l-4 border-l-gray-300">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="rounded-full bg-gray-100 p-2 dark:bg-gray-800">
+              <FileEdit className="h-4 w-4 text-gray-500" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">{kpis.drafts}</p>
+              <p className="text-xs text-muted-foreground">Brouillons</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-amber-400">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="rounded-full bg-amber-100 p-2 dark:bg-amber-900">
+              <Clock className="h-4 w-4 text-amber-500" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">
+                {scripts.reduce((a, s) => a + s.totalMedias - s.completedMedias, 0)}
+              </p>
+              <p className="text-xs text-muted-foreground">En attente</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-l-4 border-l-green-400">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="rounded-full bg-green-100 p-2 dark:bg-green-900">
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold">
+                {scripts.reduce((a, s) => a + s.completedMedias, 0)}
+              </p>
+              <p className="text-xs text-muted-foreground">Terminé</p>
+            </div>
           </CardContent>
         </Card>
       </div>
