@@ -9,9 +9,8 @@ import {
   LayoutDashboard,
   Users,
   FileText,
-  Calendar,
+  CalendarDays,
   DollarSign,
-  Film,
   Share2,
   ClipboardList,
   Settings,
@@ -20,6 +19,7 @@ import {
   Receipt,
   Bell,
   User,
+  Rocket,
   type LucideIcon,
 } from "lucide-react";
 
@@ -28,65 +28,149 @@ interface NavItem {
   href: string;
   icon: LucideIcon;
   badge?: "notif" | "messages";
+  soon?: boolean;
 }
 
-const navByRole: Record<Role, NavItem[]> = {
+interface NavCategory {
+  label: string;
+  items: NavItem[];
+}
+
+const navByRole: Record<Role, NavCategory[]> = {
   OWNER: [
-    { label: "Tableau de bord", href: "/admin/dashboard", icon: LayoutDashboard },
-    { label: "Modèles", href: "/admin/models", icon: Users },
-    { label: "Customs", href: "/admin/customs", icon: FileText },
-    { label: "Messages", href: "/admin/messages", icon: MessageSquare, badge: "messages" },
-    { label: "Scripts", href: "/admin/scripts", icon: ClipboardList },
-    { label: "Planning", href: "/admin/planning", icon: Calendar },
-    { label: "Finance", href: "/admin/finance", icon: DollarSign },
-    { label: "Contenu", href: "/admin/content", icon: Film },
-    { label: "Réseaux sociaux", href: "/admin/social", icon: Share2 },
-    { label: "Onboarding", href: "/admin/onboarding", icon: ClipboardList },
-    { label: "Paramètres", href: "/admin/settings", icon: Settings },
-    { label: "Notifications", href: "/admin/notifications", icon: Bell, badge: "notif" },
+    {
+      label: "Général",
+      items: [
+        { label: "Tableau de bord", href: "/admin/dashboard", icon: LayoutDashboard },
+        { label: "Messages", href: "/admin/messages", icon: MessageSquare, badge: "messages" },
+        { label: "Notifications", href: "/admin/notifications", icon: Bell, badge: "notif" },
+      ],
+    },
+    {
+      label: "Gestion",
+      items: [
+        { label: "Modèles", href: "/admin/models", icon: Users },
+        { label: "Onboarding", href: "/admin/onboarding", icon: Rocket },
+      ],
+    },
+    {
+      label: "Production",
+      items: [
+        { label: "Customs", href: "/admin/customs", icon: ClipboardList },
+        { label: "Contenu semaine", href: "/admin/content", icon: CalendarDays },
+        { label: "Scripts", href: "/admin/scripts", icon: FileText },
+      ],
+    },
+    {
+      label: "Opérations",
+      items: [
+        { label: "Planning", href: "/admin/planning", icon: Clock, soon: true },
+        { label: "Finance", href: "/admin/finance", icon: DollarSign, soon: true },
+        { label: "Réseaux sociaux", href: "/admin/social", icon: Share2, soon: true },
+      ],
+    },
+    {
+      label: "Système",
+      items: [
+        { label: "Paramètres", href: "/admin/settings", icon: Settings, soon: true },
+      ],
+    },
   ],
   ADMIN: [
-    { label: "Tableau de bord", href: "/admin/dashboard", icon: LayoutDashboard },
-    { label: "Modèles", href: "/admin/models", icon: Users },
-    { label: "Customs", href: "/admin/customs", icon: FileText },
-    { label: "Messages", href: "/admin/messages", icon: MessageSquare, badge: "messages" },
-    { label: "Scripts", href: "/admin/scripts", icon: ClipboardList },
-    { label: "Planning", href: "/admin/planning", icon: Calendar },
-    { label: "Finance", href: "/admin/finance", icon: DollarSign },
-    { label: "Contenu", href: "/admin/content", icon: Film },
-    { label: "Réseaux sociaux", href: "/admin/social", icon: Share2 },
-    { label: "Onboarding", href: "/admin/onboarding", icon: ClipboardList },
-    { label: "Notifications", href: "/admin/notifications", icon: Bell, badge: "notif" },
+    {
+      label: "Général",
+      items: [
+        { label: "Tableau de bord", href: "/admin/dashboard", icon: LayoutDashboard },
+        { label: "Messages", href: "/admin/messages", icon: MessageSquare, badge: "messages" },
+        { label: "Notifications", href: "/admin/notifications", icon: Bell, badge: "notif" },
+      ],
+    },
+    {
+      label: "Gestion",
+      items: [
+        { label: "Modèles", href: "/admin/models", icon: Users },
+        { label: "Onboarding", href: "/admin/onboarding", icon: Rocket },
+      ],
+    },
+    {
+      label: "Production",
+      items: [
+        { label: "Customs", href: "/admin/customs", icon: ClipboardList },
+        { label: "Contenu semaine", href: "/admin/content", icon: CalendarDays },
+        { label: "Scripts", href: "/admin/scripts", icon: FileText },
+      ],
+    },
+    {
+      label: "Opérations",
+      items: [
+        { label: "Planning", href: "/admin/planning", icon: Clock, soon: true },
+        { label: "Finance", href: "/admin/finance", icon: DollarSign, soon: true },
+        { label: "Réseaux sociaux", href: "/admin/social", icon: Share2, soon: true },
+      ],
+    },
   ],
   CHATTER_MANAGER: [
-    { label: "Tableau de bord", href: "/chatter-manager/dashboard", icon: LayoutDashboard },
-    { label: "Customs", href: "/chatter-manager/customs", icon: FileText },
-    { label: "Messages", href: "/chatter-manager/messages", icon: MessageSquare, badge: "messages" },
-    { label: "Planning", href: "/chatter-manager/planning", icon: Calendar },
-    { label: "Notifications", href: "/chatter-manager/notifications", icon: Bell, badge: "notif" },
+    {
+      label: "Général",
+      items: [
+        { label: "Tableau de bord", href: "/chatter-manager/dashboard", icon: LayoutDashboard },
+        { label: "Messages", href: "/chatter-manager/messages", icon: MessageSquare, badge: "messages" },
+        { label: "Notifications", href: "/chatter-manager/notifications", icon: Bell, badge: "notif" },
+      ],
+    },
+    {
+      label: "Production",
+      items: [
+        { label: "Customs", href: "/chatter-manager/customs", icon: ClipboardList },
+      ],
+    },
   ],
   CHATTER: [
-    { label: "Tableau de bord", href: "/chatter/dashboard", icon: LayoutDashboard },
-    { label: "Customs", href: "/chatter/customs", icon: FileText },
-    { label: "Messages", href: "/chatter/messages", icon: MessageSquare, badge: "messages" },
-    { label: "Planning", href: "/chatter/planning", icon: Clock },
-    { label: "Notifications", href: "/chatter/notifications", icon: Bell, badge: "notif" },
+    {
+      label: "Général",
+      items: [
+        { label: "Tableau de bord", href: "/chatter/dashboard", icon: LayoutDashboard },
+        { label: "Messages", href: "/chatter/messages", icon: MessageSquare, badge: "messages" },
+        { label: "Notifications", href: "/chatter/notifications", icon: Bell, badge: "notif" },
+      ],
+    },
+    {
+      label: "Production",
+      items: [
+        { label: "Customs", href: "/chatter/customs", icon: ClipboardList },
+      ],
+    },
   ],
   MODEL: [
-    { label: "Tableau de bord", href: "/model/dashboard", icon: LayoutDashboard },
-    { label: "Customs", href: "/model/customs", icon: FileText },
-    { label: "Messages", href: "/model/messages", icon: MessageSquare, badge: "messages" },
-    { label: "Contenu", href: "/model/content", icon: Film },
-    { label: "Scripts", href: "/model/scripts", icon: ClipboardList },
-    { label: "Factures", href: "/model/invoices", icon: Receipt },
-    { label: "Mon Profil", href: "/model/profile", icon: User },
-    { label: "Notifications", href: "/model/notifications", icon: Bell, badge: "notif" },
+    {
+      label: "Général",
+      items: [
+        { label: "Tableau de bord", href: "/model/dashboard", icon: LayoutDashboard },
+        { label: "Messages", href: "/model/messages", icon: MessageSquare, badge: "messages" },
+        { label: "Notifications", href: "/model/notifications", icon: Bell, badge: "notif" },
+      ],
+    },
+    {
+      label: "Production",
+      items: [
+        { label: "Customs", href: "/model/customs", icon: ClipboardList },
+        { label: "Contenu semaine", href: "/model/content", icon: CalendarDays },
+        { label: "Scripts", href: "/model/scripts", icon: FileText },
+      ],
+    },
+    {
+      label: "Mon espace",
+      items: [
+        { label: "Mon Profil", href: "/model/profile", icon: User },
+        { label: "Mes factures", href: "/model/invoices", icon: Receipt, soon: true },
+      ],
+    },
   ],
 };
 
 export function SidebarNav({ role }: { role: Role }) {
   const pathname = usePathname();
-  const items = navByRole[role] || [];
+  const categories = navByRole[role] || [];
   const [notifCount, setNotifCount] = useState(0);
   const [msgCount, setMsgCount] = useState(0);
 
@@ -123,34 +207,64 @@ export function SidebarNav({ role }: { role: Role }) {
   }
 
   return (
-    <nav className="flex flex-col gap-0.5 px-3 py-2">
-      {items.map((item) => {
-        const isActive = pathname.startsWith(item.href);
-        const count = getBadgeCount(item.badge);
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
+    <nav className="flex flex-col px-3 py-2">
+      {categories.map((cat, catIndex) => (
+        <div key={cat.label}>
+          {/* Category label */}
+          <p
             className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-              isActive
-                ? "bg-foreground text-background"
-                : "text-muted-foreground hover:bg-gray-100 hover:text-foreground"
+              "text-[10px] uppercase tracking-widest text-muted-foreground/60 px-3 mb-1",
+              catIndex > 0 ? "mt-5" : "mt-1"
             )}
           >
-            <item.icon className="h-4 w-4" />
-            {item.label}
-            {item.badge && count > 0 && (
-              <span className={cn(
-                "ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white",
-                "bg-red-500"
-              )}>
-                {count > 99 ? "99+" : count}
-              </span>
-            )}
-          </Link>
-        );
-      })}
+            {cat.label}
+          </p>
+
+          {/* Items */}
+          <div className="flex flex-col gap-0.5">
+            {cat.items.map((item) => {
+              const isActive = pathname.startsWith(item.href);
+              const count = getBadgeCount(item.badge);
+
+              if (item.soon) {
+                return (
+                  <div
+                    key={item.href}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground/40 cursor-default select-none"
+                  >
+                    <item.icon className="h-4 w-4" />
+                    {item.label}
+                    <span className="ml-auto text-[9px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded dark:bg-gray-800 dark:text-gray-500">
+                      bientôt
+                    </span>
+                  </div>
+                );
+              }
+
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:bg-gray-100 hover:text-foreground dark:hover:bg-gray-800"
+                  )}
+                >
+                  <item.icon className="h-4 w-4" />
+                  {item.label}
+                  {item.badge && count > 0 && (
+                    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                      {count > 99 ? "99+" : count}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </nav>
   );
 }
