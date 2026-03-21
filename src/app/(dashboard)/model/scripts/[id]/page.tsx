@@ -324,7 +324,37 @@ export default function ModelScriptDetailPage() {
                   <div className="space-y-2 pl-11">
                     {step.elements
                       .sort((a, b) => a.order - b.order)
-                      .map((element) => (
+                      .map((element) => {
+                        const isContext = element.type === "MESSAGE" || element.type === "WAIT" || element.type === "NOTE";
+
+                        // Dimmed context elements (MESSAGE, WAIT, NOTE)
+                        if (isContext) {
+                          return (
+                            <div
+                              key={element.id}
+                              className="border-l border-gray-200 dark:border-gray-800 rounded-sm py-1.5 px-3 opacity-40"
+                            >
+                              {element.type === "MESSAGE" && element.messageText && (
+                                <p className="text-xs text-muted-foreground italic whitespace-pre-wrap line-clamp-2">
+                                  {element.messageText}
+                                </p>
+                              )}
+                              {element.type === "WAIT" && (
+                                <p className="text-xs text-muted-foreground">
+                                  ⏳ {element.waitDescription || "Attente réponse"}
+                                </p>
+                              )}
+                              {element.type === "NOTE" && element.noteText && (
+                                <p className="text-xs text-muted-foreground italic line-clamp-1">
+                                  {element.noteText}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        // Prominent content elements (FREE_CONTENT, PAID_CONTENT)
+                        return (
                         <div
                           key={element.id}
                           className={cn(
@@ -332,27 +362,9 @@ export default function ModelScriptDetailPage() {
                             getElementClasses(element.type)
                           )}
                         >
-                          {/* Element type label */}
                           <p className="text-[10px] uppercase font-semibold tracking-wider text-muted-foreground mb-1.5">
                             {ELEMENT_TYPE_LABELS[element.type] || element.type}
                           </p>
-
-                          {/* Content by type - read-only */}
-                          {element.type === "MESSAGE" && element.messageText && (
-                            <p className="text-sm whitespace-pre-wrap">
-                              {element.messageText}
-                            </p>
-                          )}
-
-                          {element.type === "WAIT" && element.waitDescription && (
-                            <p className="text-sm">{element.waitDescription}</p>
-                          )}
-
-                          {element.type === "NOTE" && element.noteText && (
-                            <p className="text-sm italic">
-                              {element.noteText}
-                            </p>
-                          )}
 
                           {element.type === "PAID_CONTENT" &&
                             element.price !== undefined &&
@@ -501,7 +513,8 @@ export default function ModelScriptDetailPage() {
                               </div>
                             )}
                         </div>
-                      ))}
+                        );
+                      })}
                   </div>
                 </CardContent>
               </Card>
