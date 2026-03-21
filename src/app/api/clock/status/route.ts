@@ -13,8 +13,8 @@ export async function GET(_req: NextRequest) {
     const now = new Date();
     const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
-    const shift = await prisma.shiftSchedule.findUnique({
-      where: { chatterId_shiftDate: { chatterId: userId, shiftDate: today } },
+    const shift = await prisma.shiftSchedule.findFirst({
+      where: { chatterId: userId, shiftDate: today },
     });
 
     let clock = await prisma.clockRecord.findUnique({

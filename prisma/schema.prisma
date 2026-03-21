@@ -116,6 +116,7 @@ model ModelProfile {
   invoices           ModelInvoice[]
   onboarding         OnboardingPipeline?
   inflowwData        InflowwDailyData[]
+  shifts             ShiftSchedule[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -293,18 +294,21 @@ model ScriptMedia {
 }
 
 model ShiftSchedule {
-  id        String   @id @default(cuid())
+  id        String        @id @default(cuid())
   chatterId String
-  chatter   User     @relation("ChatterShifts", fields: [chatterId], references: [id], onDelete: Cascade)
+  chatter   User          @relation("ChatterShifts", fields: [chatterId], references: [id], onDelete: Cascade)
+  modelId   String?
+  model     ModelProfile?  @relation(fields: [modelId], references: [id], onDelete: SetNull)
   shiftDate DateTime
   shiftType String
   note      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([chatterId, shiftDate])
+  @@unique([chatterId, shiftDate, modelId])
   @@index([shiftDate])
   @@index([chatterId])
+  @@index([modelId])
 }
 
 model ClockRecord {
