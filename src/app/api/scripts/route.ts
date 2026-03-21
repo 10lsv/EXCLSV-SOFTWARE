@@ -8,42 +8,47 @@ export async function GET(req: NextRequest) {
   const { error } = await requireRole(Role.OWNER, Role.ADMIN, Role.CHATTER_MANAGER);
   if (error) return error;
 
-  const { searchParams } = req.nextUrl;
-  const modelId = searchParams.get("modelId");
-  const status = searchParams.get("status");
-  const category = searchParams.get("category");
+  try {
+    const { searchParams } = req.nextUrl;
+    const modelId = searchParams.get("modelId");
+    const status = searchParams.get("status");
+    const category = searchParams.get("category");
 
-  const where: Prisma.ScriptWhereInput = {};
-  if (modelId) where.modelId = modelId;
-  if (status) where.status = status as "DRAFT" | "VALIDATED";
-  if (category) where.category = category;
+    const where: Prisma.ScriptWhereInput = {};
+    if (modelId) where.modelId = modelId;
+    if (status) where.status = status as "DRAFT" | "VALIDATED";
+    if (category) where.category = category;
 
-  const scripts = await prisma.script.findMany({
-    where,
-    include: {
-      model: { select: { id: true, stageName: true, photoUrl: true } },
-      _count: { select: { steps: true, contentTasks: true } },
-      contentTasks: { select: { status: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+    const scripts = await prisma.script.findMany({
+      where,
+      include: {
+        model: { select: { id: true, stageName: true, photoUrl: true } },
+        _count: { select: { steps: true, contentTasks: true } },
+        contentTasks: { select: { status: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
-  const data = scripts.map((s) => ({
-    id: s.id,
-    name: s.name,
-    category: s.category,
-    description: s.description,
-    targetPrice: s.targetPrice,
-    status: s.status,
-    tags: s.tags,
-    model: s.model,
-    _count: s._count,
-    completedContentTasks: s.contentTasks.filter((t) => t.status === "COMPLETED").length,
-    createdAt: s.createdAt,
-    updatedAt: s.updatedAt,
-  }));
+    const data = scripts.map((s) => ({
+      id: s.id,
+      name: s.name,
+      category: s.category,
+      description: s.description,
+      targetPrice: s.targetPrice,
+      status: s.status,
+      tags: s.tags,
+      model: s.model,
+      _count: s._count,
+      completedContentTasks: s.contentTasks.filter((t) => t.status === "COMPLETED").length,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+    }));
 
-  return jsonSuccess(data);
+    return jsonSuccess(data);
+  } catch (err: unknown) {
+    console.error("[SCRIPTS GET]", err);
+    return jsonError(err instanceof Error ? err.message : "Erreur interne", 500);
+  }
 }
 
 // POST /api/scripts — create
@@ -51,26 +56,31 @@ export async function POST(req: NextRequest) {
   const { error, session } = await requireRole(Role.OWNER, Role.ADMIN);
   if (error) return error;
 
-  const body = await req.json();
-  const { name, modelId, category, description, targetPrice, targetAudience, tags } = body;
+  try {
+    const body = await req.json();
+    const { name, modelId, category, description, targetPrice, targetAudience, tags } = body;
 
-  if (!name || !modelId || !category) {
-    return jsonError("name, modelId et category requis");
+    if (!name || !modelId || !category) {
+      return jsonError("name, modelId et category requis");
+    }
+
+    const script = await prisma.script.create({
+      data: {
+        name,
+        modelId,
+        category,
+        description: description || null,
+        targetPrice: targetPrice ? parseFloat(String(targetPrice)) : null,
+        targetAudience: targetAudience || null,
+        tags: tags || [],
+      },
+    });
+
+    await logAudit(session!.user.id, "CREATE_SCRIPT", "Script", script.id, { name, modelId, category });
+
+    return jsonSuccess(script, 201);
+  } catch (err: unknown) {
+    console.error("[SCRIPTS POST]", err);
+    return jsonError(err instanceof Error ? err.message : "Erreur interne", 500);
   }
-
-  const script = await prisma.script.create({
-    data: {
-      name,
-      modelId,
-      category,
-      description: description || null,
-      targetPrice: targetPrice ? parseFloat(targetPrice) : null,
-      targetAudience: targetAudience || null,
-      tags: tags || [],
-    },
-  });
-
-  await logAudit(session!.user.id, "CREATE_SCRIPT", "Script", script.id, { name, modelId, category });
-
-  return jsonSuccess(script, 201);
 }

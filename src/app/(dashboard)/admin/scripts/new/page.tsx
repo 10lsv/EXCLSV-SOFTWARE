@@ -92,7 +92,17 @@ export default function AdminScriptsNewPage() {
         }),
       });
 
-      const json = await res.json();
+      const text = await res.text();
+      let json;
+      try {
+        json = JSON.parse(text);
+      } catch {
+        console.error("[Scripts] Non-JSON response:", res.status, text.substring(0, 200));
+        setError(`Erreur serveur (${res.status})`);
+        setLoading(false);
+        return;
+      }
+
       if (!json.success) {
         setError(json.error || "Erreur lors de la création");
         setLoading(false);
@@ -100,8 +110,9 @@ export default function AdminScriptsNewPage() {
       }
 
       router.push(`/admin/scripts/${json.data.id}`);
-    } catch {
-      setError("Erreur réseau");
+    } catch (err) {
+      console.error("[Scripts] Network error:", err);
+      setError(`Erreur réseau: ${err instanceof Error ? err.message : String(err)}`);
       setLoading(false);
     }
   }
