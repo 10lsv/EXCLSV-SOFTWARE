@@ -248,9 +248,10 @@ model Script {
   model   ModelProfile @relation(fields: [modelId], references: [id])
 
   name            String
-  scene           String
-  targetAudience  String
-  expectedRevenue String?
+  category        String    // UPSELL, SEXTING, RETENTION, FIRST_MESSAGE, MASS_DM, CUSTOM_PROMO
+  description     String?
+  targetPrice     Float?
+  targetAudience  String?
   status          ScriptStatus @default(DRAFT)
   tags            String[]
 
@@ -267,8 +268,10 @@ model ScriptStep {
   script   Script @relation(fields: [scriptId], references: [id], onDelete: Cascade)
 
   sortOrder    Int
-  type         String
+  title        String   @default("")
   content      String
+  notes        String?
+  type         String   @default("message")
   price        Float?
   waitDuration String?
 
@@ -278,12 +281,13 @@ model ScriptStep {
 model ScriptContentTask {
   id       String       @id @default(cuid())
   scriptId String
-  script   Script       @relation(fields: [scriptId], references: [id])
+  script   Script       @relation(fields: [scriptId], references: [id], onDelete: Cascade)
   modelId  String
   model    ModelProfile @relation(fields: [modelId], references: [id])
 
   description String
   contentType ContentType
+  outfit      String?
   duration    String?
   status      CustomStatus @default(NOT_STARTED)
   driveLink   String?
