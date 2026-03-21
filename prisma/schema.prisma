@@ -28,11 +28,6 @@ enum InvoiceStatus {
   OVERDUE
 }
 
-enum ScriptStatus {
-  DRAFT
-  VALIDATED
-}
-
 enum ContentType {
   PHOTO
   VIDEO
@@ -120,7 +115,6 @@ model ModelProfile {
   weeklyTemplates    WeeklyContentTemplate[]
   weeklyTasks        WeeklyContentTask[]
   scripts            Script[]
-  scriptContentTasks ScriptContentTask[]
   chatterAssignments ChatterAssignment[]
   invoices           ModelInvoice[]
   onboarding         OnboardingPipeline?
@@ -243,57 +237,64 @@ model ContentPlanEntry {
 }
 
 model Script {
-  id      String       @id @default(cuid())
-  modelId String
-  model   ModelProfile @relation(fields: [modelId], references: [id])
-
-  name            String
-  category        String    // UPSELL, SEXTING, RETENTION, FIRST_MESSAGE, MASS_DM, CUSTOM_PROMO
-  description     String?
-  targetPrice     Float?
-  targetAudience  String?
-  status          ScriptStatus @default(DRAFT)
-  tags            String[]
-
-  steps        ScriptStep[]
-  contentTasks ScriptContentTask[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String       @id @default(cuid())
+  name        String
+  modelId     String
+  model       ModelProfile @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  category    String       // UPSELL, SEXTING, RETENTION, FIRST_MESSAGE, MASS_DM, CUSTOM_PROMO
+  description String?
+  tags        String[]     @default([])
+  status      String       @default("DRAFT") // DRAFT | VALIDATED
+  steps       ScriptStep[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 }
 
 model ScriptStep {
-  id       String @id @default(cuid())
-  scriptId String
-  script   Script @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  id         String          @id @default(cuid())
+  scriptId   String
+  script     Script          @relation(fields: [scriptId], references: [id], onDelete: Cascade)
+  title      String
+  order      Int
+  elements   ScriptElement[]
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
 
-  sortOrder    Int
-  title        String   @default("")
-  content      String
-  notes        String?
-  type         String   @default("message")
-  price        Float?
-  waitDuration String?
-
-  createdAt DateTime @default(now())
+  @@index([scriptId, order])
 }
 
-model ScriptContentTask {
-  id       String       @id @default(cuid())
-  scriptId String
-  script   Script       @relation(fields: [scriptId], references: [id], onDelete: Cascade)
-  modelId  String
-  model    ModelProfile @relation(fields: [modelId], references: [id])
+model ScriptElement {
+  id              String        @id @default(cuid())
+  stepId          String
+  step            ScriptStep    @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  type            String        // MESSAGE | FREE_CONTENT | PAID_CONTENT | WAIT | NOTE
+  order           Int
+  messageText     String?
+  waitDescription String?
+  noteText        String?
+  price           Float?
+  medias          ScriptMedia[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
+  @@index([stepId, order])
+}
+
+model ScriptMedia {
+  id          String        @id @default(cuid())
+  elementId   String
+  element     ScriptElement @relation(fields: [elementId], references: [id], onDelete: Cascade)
+  mediaType   String        // PHOTO | VIDEO | AUDIO
   description String
-  contentType ContentType
   outfit      String?
   duration    String?
-  status      CustomStatus @default(NOT_STARTED)
+  status      String        @default("NOT_STARTED") // NOT_STARTED | IN_PROGRESS | COMPLETED
   driveLink   String?
+  order       Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  @@index([elementId])
 }
 
 model ShiftSchedule {

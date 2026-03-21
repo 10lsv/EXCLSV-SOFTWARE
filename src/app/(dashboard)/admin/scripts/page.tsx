@@ -21,6 +21,7 @@ import {
   FileEdit,
   Clock,
   Loader2,
+  Copy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -37,7 +38,6 @@ interface ScriptListItem {
   name: string;
   category: string;
   description?: string;
-  targetPrice?: number;
   status: "DRAFT" | "VALIDATED";
   tags: string[];
   model: {
@@ -45,11 +45,10 @@ interface ScriptListItem {
     stageName: string;
     photoUrl?: string | null;
   };
-  _count: {
-    steps: number;
-    contentTasks: number;
-  };
-  completedContentTasks: number;
+  stepsCount: number;
+  totalMedias: number;
+  completedMedias: number;
+  totalPrice: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -82,6 +81,7 @@ export default function AdminScriptsPage() {
   const [filterModel, setFilterModel] = useState<string>("");
   const [filterCategory, setFilterCategory] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("");
+  const [duplicating, setDuplicating] = useState<string | null>(null);
 
   const fetchScripts = useCallback(async () => {
     setLoading(true);
@@ -96,23 +96,27 @@ export default function AdminScriptsPage() {
       if (json.success) {
         setScripts(json.data);
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error("[Scripts] Erreur chargement:", err);
     }
     setLoading(false);
   }, [filterModel, filterCategory, filterStatus]);
 
   const fetchModels = useCallback(async () => {
-    const res = await fetch("/api/models?limit=100");
-    const json = await res.json();
-    if (json.success) {
-      setModels(
-        json.data.models.map((m: ModelOption) => ({
-          id: m.id,
-          stageName: m.stageName,
-          photoUrl: m.photoUrl,
-        }))
-      );
+    try {
+      const res = await fetch("/api/models?limit=100");
+      const json = await res.json();
+      if (json.success) {
+        setModels(
+          json.data.models.map((m: ModelOption) => ({
+            id: m.id,
+            stageName: m.stageName,
+            photoUrl: m.photoUrl,
+          }))
+        );
+      }
+    } catch (err) {
+      console.error("[Scripts] Erreur chargement modèles:", err);
     }
   }, []);
 
@@ -125,14 +129,29 @@ export default function AdminScriptsPage() {
     return () => clearTimeout(timeout);
   }, [fetchScripts]);
 
+  async function handleDuplicate(e: React.MouseEvent, scriptId: string) {
+    e.stopPropagation();
+    setDuplicating(scriptId);
+    try {
+      const res = await fetch(`/api/scripts/${scriptId}/duplicate`, {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (json.success) {
+        fetchScripts();
+      }
+    } catch (err) {
+      console.error("[Scripts] Erreur duplication:", err);
+    }
+    setDuplicating(null);
+  }
+
   const totalScripts = scripts.length;
   const validated = scripts.filter((s) => s.status === "VALIDATED").length;
   const drafts = scripts.filter((s) => s.status === "DRAFT").length;
-  const pendingContent = scripts.reduce((acc, s) => {
-    const total = s._count.contentTasks;
-    const done = s.completedContentTasks;
-    return acc + (total - done);
-  }, 0);
+  const pendingContent = scripts
+    .filter((s) => s.status === "VALIDATED")
+    .reduce((acc, s) => acc + (s.totalMedias - s.completedMedias), 0);
 
   return (
     <div className="space-y-6">
@@ -273,11 +292,9 @@ export default function AdminScriptsPage() {
       ) : (
         <div className="grid gap-3">
           {scripts.map((script) => {
-            const contentTotal = script._count.contentTasks;
-            const contentDone = script.completedContentTasks;
-            const contentPercent =
-              contentTotal > 0
-                ? Math.round((contentDone / contentTotal) * 100)
+            const mediaPercent =
+              script.totalMedias > 0
+                ? Math.round((script.completedMedias / script.totalMedias) * 100)
                 : 0;
 
             return (
@@ -294,7 +311,7 @@ export default function AdminScriptsPage() {
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 space-y-2">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 flex-wrap">
                         <h3 className="font-bold text-base">{script.name}</h3>
                         <Badge
                           variant="secondary"
@@ -329,8 +346,8 @@ export default function AdminScriptsPage() {
                           <span>{script.model.stageName}</span>
                         </div>
 
-                        {script.targetPrice !== undefined && script.targetPrice !== null && (
-                          <span className="font-medium">{script.targetPrice}$</span>
+                        {script.totalPrice > 0 && (
+                          <span className="font-medium">{script.totalPrice}$</span>
                         )}
 
                         <span>
@@ -340,15 +357,29 @@ export default function AdminScriptsPage() {
                         </span>
                       </div>
 
-                      {contentTotal > 0 && (
+                      {script.totalMedias > 0 && (
                         <div className="flex items-center gap-3 max-w-xs">
-                          <Progress value={contentPercent} className="h-1.5 flex-1" />
+                          <Progress value={mediaPercent} className="h-1.5 flex-1" />
                           <span className="text-xs text-muted-foreground whitespace-nowrap">
-                            {contentDone}/{contentTotal} contenus
+                            {script.completedMedias}/{script.totalMedias} médias
                           </span>
                         </div>
                       )}
                     </div>
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
+                      disabled={duplicating === script.id}
+                      onClick={(e) => handleDuplicate(e, script.id)}
+                    >
+                      {duplicating === script.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

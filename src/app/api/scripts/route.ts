@@ -3,7 +3,19 @@ import { prisma } from "@/lib/prisma";
 import { Role, Prisma } from "@prisma/client";
 import { jsonSuccess, jsonError, requireRole, logAudit } from "@/lib/api-utils";
 
-// GET /api/scripts — list with filters
+const scriptInclude = {
+  model: { select: { id: true, stageName: true, photoUrl: true } },
+  steps: {
+    orderBy: { order: "asc" as const },
+    include: {
+      elements: {
+        orderBy: { order: "asc" as const },
+        include: { medias: { orderBy: { order: "asc" as const } } },
+      },
+    },
+  },
+};
+
 export async function GET(req: NextRequest) {
   const { error } = await requireRole(Role.OWNER, Role.ADMIN, Role.CHATTER_MANAGER);
   if (error) return error;
@@ -16,33 +28,40 @@ export async function GET(req: NextRequest) {
 
     const where: Prisma.ScriptWhereInput = {};
     if (modelId) where.modelId = modelId;
-    if (status) where.status = status as "DRAFT" | "VALIDATED";
+    if (status) where.status = status;
     if (category) where.category = category;
 
     const scripts = await prisma.script.findMany({
       where,
-      include: {
-        model: { select: { id: true, stageName: true, photoUrl: true } },
-        _count: { select: { steps: true, contentTasks: true } },
-        contentTasks: { select: { status: true } },
-      },
+      include: scriptInclude,
       orderBy: { createdAt: "desc" },
     });
 
-    const data = scripts.map((s) => ({
-      id: s.id,
-      name: s.name,
-      category: s.category,
-      description: s.description,
-      targetPrice: s.targetPrice,
-      status: s.status,
-      tags: s.tags,
-      model: s.model,
-      _count: s._count,
-      completedContentTasks: s.contentTasks.filter((t) => t.status === "COMPLETED").length,
-      createdAt: s.createdAt,
-      updatedAt: s.updatedAt,
-    }));
+    const data = scripts.map((s) => {
+      const allMedias = s.steps.flatMap((st) =>
+        st.elements.flatMap((el) => el.medias)
+      );
+      const totalPrice = s.steps
+        .flatMap((st) => st.elements)
+        .filter((el) => el.type === "PAID_CONTENT" && el.price)
+        .reduce((sum, el) => sum + (el.price || 0), 0);
+
+      return {
+        id: s.id,
+        name: s.name,
+        category: s.category,
+        description: s.description,
+        status: s.status,
+        tags: s.tags,
+        model: s.model,
+        stepsCount: s.steps.length,
+        totalMedias: allMedias.length,
+        completedMedias: allMedias.filter((m) => m.status === "COMPLETED").length,
+        totalPrice,
+        createdAt: s.createdAt,
+        updatedAt: s.updatedAt,
+      };
+    });
 
     return jsonSuccess(data);
   } catch (err: unknown) {
@@ -51,14 +70,13 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST /api/scripts — create
 export async function POST(req: NextRequest) {
   const { error, session } = await requireRole(Role.OWNER, Role.ADMIN);
   if (error) return error;
 
   try {
     const body = await req.json();
-    const { name, modelId, category, description, targetPrice, targetAudience, tags } = body;
+    const { name, modelId, category, description, tags } = body;
 
     if (!name || !modelId || !category) {
       return jsonError("name, modelId et category requis");
@@ -70,14 +88,11 @@ export async function POST(req: NextRequest) {
         modelId,
         category,
         description: description || null,
-        targetPrice: targetPrice ? parseFloat(String(targetPrice)) : null,
-        targetAudience: targetAudience || null,
         tags: tags || [],
       },
     });
 
     await logAudit(session!.user.id, "CREATE_SCRIPT", "Script", script.id, { name, modelId, category });
-
     return jsonSuccess(script, 201);
   } catch (err: unknown) {
     console.error("[SCRIPTS POST]", err);

@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { FileText, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { format } from "date-fns";
+import { fr } from "date-fns/locale";
 
 const CATEGORY_COLORS: Record<string, string> = {
   UPSELL: "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
@@ -31,10 +33,9 @@ interface ModelScript {
   name: string;
   category: string;
   description?: string;
-  _count: {
-    contentTasks: number;
-  };
-  completedContentTasks: number;
+  totalMedias: number;
+  completedMedias: number;
+  createdAt: string;
 }
 
 export default function ModelScriptsPage() {
@@ -50,8 +51,8 @@ export default function ModelScriptsPage() {
       if (json.success) {
         setScripts(json.data);
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error("[Scripts] Erreur chargement:", err);
     }
     setLoading(false);
   }, []);
@@ -65,7 +66,7 @@ export default function ModelScriptsPage() {
       <div>
         <h1 className="text-xl font-bold tracking-tight">Mes Scripts</h1>
         <p className="text-sm text-muted-foreground">
-          {scripts.length} script{scripts.length !== 1 ? "s" : ""} validé{scripts.length !== 1 ? "s" : ""}
+          Consultez vos scripts et produisez les contenus demandés
         </p>
       </div>
 
@@ -85,11 +86,11 @@ export default function ModelScriptsPage() {
       ) : (
         <div className="grid gap-3">
           {scripts.map((script) => {
-            const contentTotal = script._count.contentTasks;
-            const contentDone = script.completedContentTasks;
-            const contentPercent =
-              contentTotal > 0
-                ? Math.round((contentDone / contentTotal) * 100)
+            const mediaPercent =
+              script.totalMedias > 0
+                ? Math.round(
+                    (script.completedMedias / script.totalMedias) * 100
+                  )
                 : 0;
 
             return (
@@ -99,24 +100,32 @@ export default function ModelScriptsPage() {
                 onClick={() => router.push(`/model/scripts/${script.id}`)}
               >
                 <CardContent className="p-4 space-y-2">
-                  <div className="flex items-center gap-3">
-                    <h3 className="font-bold text-base">{script.name}</h3>
-                    <Badge
-                      variant="secondary"
-                      className={cn(
-                        "text-xs",
-                        CATEGORY_COLORS[script.category]
-                      )}
-                    >
-                      {CATEGORY_LABELS[script.category] || script.category}
-                    </Badge>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <h3 className="font-bold text-base">{script.name}</h3>
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          "text-xs",
+                          CATEGORY_COLORS[script.category]
+                        )}
+                      >
+                        {CATEGORY_LABELS[script.category] || script.category}
+                      </Badge>
+                    </div>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      {format(new Date(script.createdAt), "d MMM yyyy", {
+                        locale: fr,
+                      })}
+                    </span>
                   </div>
 
-                  {contentTotal > 0 && (
+                  {script.totalMedias > 0 && (
                     <div className="flex items-center gap-3 max-w-xs">
-                      <Progress value={contentPercent} className="h-1.5 flex-1" />
+                      <Progress value={mediaPercent} className="h-1.5 flex-1" />
                       <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {contentDone}/{contentTotal} contenus
+                        {script.completedMedias}/{script.totalMedias} médias
+                        produits
                       </span>
                     </div>
                   )}

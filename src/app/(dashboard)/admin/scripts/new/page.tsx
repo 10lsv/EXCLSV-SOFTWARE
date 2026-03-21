@@ -13,8 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, Loader2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { ArrowLeft, Loader2 } from "lucide-react";
 
 interface ModelOption {
   id: string;
@@ -42,18 +42,22 @@ export default function AdminScriptsNewPage() {
   const [modelId, setModelId] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
-  const [targetPrice, setTargetPrice] = useState("");
+  const [tags, setTags] = useState("");
 
   const fetchModels = useCallback(async () => {
-    const res = await fetch("/api/models?limit=100");
-    const json = await res.json();
-    if (json.success) {
-      setModels(
-        json.data.models.map((m: ModelOption) => ({
-          id: m.id,
-          stageName: m.stageName,
-        }))
-      );
+    try {
+      const res = await fetch("/api/models?limit=100");
+      const json = await res.json();
+      if (json.success) {
+        setModels(
+          json.data.models.map((m: ModelOption) => ({
+            id: m.id,
+            stageName: m.stageName,
+          }))
+        );
+      }
+    } catch (err) {
+      console.error("[Scripts] Erreur chargement modèles:", err);
     }
   }, []);
 
@@ -80,6 +84,11 @@ export default function AdminScriptsNewPage() {
     setError("");
 
     try {
+      const parsedTags = tags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+
       const res = await fetch("/api/scripts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -88,7 +97,7 @@ export default function AdminScriptsNewPage() {
           modelId,
           category,
           description: description.trim() || undefined,
-          targetPrice: targetPrice ? parseFloat(targetPrice) : undefined,
+          tags: parsedTags.length > 0 ? parsedTags : undefined,
         }),
       });
 
@@ -97,7 +106,7 @@ export default function AdminScriptsNewPage() {
       try {
         json = JSON.parse(text);
       } catch {
-        console.error("[Scripts] Non-JSON response:", res.status, text.substring(0, 200));
+        console.error("[Scripts] Réponse non-JSON:", res.status, text.substring(0, 200));
         setError(`Erreur serveur (${res.status})`);
         setLoading(false);
         return;
@@ -111,7 +120,7 @@ export default function AdminScriptsNewPage() {
 
       router.push(`/admin/scripts/${json.data.id}`);
     } catch (err) {
-      console.error("[Scripts] Network error:", err);
+      console.error("[Scripts] Erreur réseau:", err);
       setError(`Erreur réseau: ${err instanceof Error ? err.message : String(err)}`);
       setLoading(false);
     }
@@ -204,15 +213,15 @@ export default function AdminScriptsNewPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Prix cible ($)</label>
+              <label className="text-sm font-medium">Tags</label>
               <Input
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="Ex: 200"
-                value={targetPrice}
-                onChange={(e) => setTargetPrice(e.target.value)}
+                placeholder="Ex: douche, spender, upsell (séparés par des virgules)"
+                value={tags}
+                onChange={(e) => setTags(e.target.value)}
               />
+              <p className="text-xs text-muted-foreground">
+                Séparez les tags par des virgules
+              </p>
             </div>
 
             <div className="flex justify-end gap-3 pt-2">

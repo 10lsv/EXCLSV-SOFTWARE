@@ -22,35 +22,29 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   ArrowLeft,
   Loader2,
   Plus,
-  Pencil,
   Trash2,
   CheckCircle2,
   FileEdit,
-  MessageSquare,
-  Image,
+  Copy,
+  X,
+  Camera,
   Video,
   Mic,
-  Layers,
-  Clock,
-  StickyNote,
-  Send,
+  MessageSquare,
   Unlock,
   Lock,
-  Save,
+  Clock,
+  StickyNote,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
-import { fr } from "date-fns/locale";
+
+// ——— Constants ———
 
 const CATEGORY_COLORS: Record<string, string> = {
   UPSELL: "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
@@ -70,69 +64,69 @@ const CATEGORY_LABELS: Record<string, string> = {
   CUSTOM_PROMO: "Promo custom",
 };
 
-const STEP_TYPE_LABELS: Record<string, string> = {
-  message: "Message",
-  free_content: "Contenu gratuit",
-  paid_content: "Contenu payant",
-  vocal: "Vocal",
-  wait: "Attente",
-  internal_note: "Note interne",
+const ELEMENT_TYPES = [
+  { value: "MESSAGE", label: "Message", icon: MessageSquare },
+  { value: "FREE_CONTENT", label: "Contenu gratuit", icon: Unlock },
+  { value: "PAID_CONTENT", label: "PPV", icon: Lock },
+  { value: "WAIT", label: "Attente", icon: Clock },
+  { value: "NOTE", label: "Note", icon: StickyNote },
+] as const;
+
+const ELEMENT_TYPE_LABELS: Record<string, string> = {
+  MESSAGE: "Message",
+  FREE_CONTENT: "Contenu gratuit",
+  PAID_CONTENT: "PPV",
+  WAIT: "Attente",
+  NOTE: "Note",
 };
 
-const STEP_TYPE_ICONS: Record<string, React.ReactNode> = {
-  message: <MessageSquare className="h-4 w-4" />,
-  free_content: <Unlock className="h-4 w-4" />,
-  paid_content: <Lock className="h-4 w-4" />,
-  vocal: <Mic className="h-4 w-4" />,
-  wait: <Clock className="h-4 w-4" />,
-  internal_note: <StickyNote className="h-4 w-4" />,
-};
-
-const CONTENT_TYPE_ICONS: Record<string, React.ReactNode> = {
-  PHOTO: <Image className="h-4 w-4" />,
-  VIDEO: <Video className="h-4 w-4" />,
-  AUDIO: <Mic className="h-4 w-4" />,
-  COMBO: <Layers className="h-4 w-4" />,
-};
-
-const CONTENT_TYPE_LABELS: Record<string, string> = {
-  PHOTO: "Photo",
-  VIDEO: "Vidéo",
-  AUDIO: "Audio",
-  COMBO: "Combo",
-};
-
-const CONTENT_STATUS_COLORS: Record<string, string> = {
+const MEDIA_STATUS_COLORS: Record<string, string> = {
   NOT_STARTED: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
   IN_PROGRESS: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
   COMPLETED: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
 };
 
-const CONTENT_STATUS_LABELS: Record<string, string> = {
+const MEDIA_STATUS_LABELS: Record<string, string> = {
   NOT_STARTED: "Non commencé",
   IN_PROGRESS: "En cours",
   COMPLETED: "Terminé",
 };
 
-interface ScriptStep {
-  id: string;
-  sortOrder: number;
-  type: string;
-  content: string;
-  title?: string;
-  notes?: string;
-  price?: number;
-  waitDuration?: string;
-}
+const MEDIA_TYPE_ICONS: Record<string, typeof Camera> = {
+  PHOTO: Camera,
+  VIDEO: Video,
+  AUDIO: Mic,
+};
 
-interface ScriptContentTask {
+// ——— Interfaces ———
+
+interface ScriptMedia {
   id: string;
-  contentType: string;
+  mediaType: string;
   description: string;
-  duration?: string;
   outfit?: string;
+  duration?: string;
   status: string;
   driveLink?: string;
+  order: number;
+}
+
+interface ScriptElement {
+  id: string;
+  type: string;
+  order: number;
+  messageText?: string;
+  waitDescription?: string;
+  noteText?: string;
+  price?: number;
+  medias: ScriptMedia[];
+}
+
+interface ScriptStep {
+  id: string;
+  title: string;
+  order: number;
+  elements: ScriptElement[];
 }
 
 interface ScriptDetail {
@@ -140,7 +134,6 @@ interface ScriptDetail {
   name: string;
   category: string;
   description?: string;
-  targetPrice?: number;
   status: "DRAFT" | "VALIDATED";
   tags: string[];
   model: {
@@ -149,10 +142,54 @@ interface ScriptDetail {
     photoUrl?: string | null;
   };
   steps: ScriptStep[];
-  contentTasks: ScriptContentTask[];
-  createdAt: string;
-  updatedAt: string;
 }
+
+// ——— Helpers ———
+
+function getElementClasses(type: string): string {
+  switch (type) {
+    case "MESSAGE":
+      return "border-l-[3px] border-l-blue-500 bg-blue-50/50 dark:bg-blue-950/20";
+    case "FREE_CONTENT":
+      return "border-l-[3px] border-l-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20";
+    case "PAID_CONTENT":
+      return "border-l-[3px] border-l-gray-900 bg-gray-50 dark:border-l-gray-100 dark:bg-gray-900/30";
+    case "WAIT":
+      return "border-l-[3px] border-l-orange-400 bg-orange-50/50 dark:bg-orange-950/20";
+    case "NOTE":
+      return "border-l-[3px] border-l-dashed border-l-gray-300 bg-muted/50";
+    default:
+      return "";
+  }
+}
+
+function computeTotalPrice(steps: ScriptStep[]): number {
+  let total = 0;
+  for (const step of steps) {
+    for (const el of step.elements) {
+      if (el.type === "PAID_CONTENT" && el.price) {
+        total += el.price;
+      }
+    }
+  }
+  return total;
+}
+
+function computeMediaCounts(steps: ScriptStep[]): { total: number; completed: number } {
+  let total = 0;
+  let completed = 0;
+  for (const step of steps) {
+    for (const el of step.elements) {
+      for (const media of el.medias) {
+        total++;
+        if (media.status === "COMPLETED") completed++;
+      }
+    }
+  }
+  return { total, completed };
+}
+
+// ——— Component ———
 
 export default function AdminScriptDetailPage() {
   const params = useParams();
@@ -160,46 +197,39 @@ export default function AdminScriptDetailPage() {
   const [script, setScript] = useState<ScriptDetail | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Step dialog
+  // Inline edit for script name
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState("");
+
+  // Add step dialog
   const [stepDialogOpen, setStepDialogOpen] = useState(false);
-  const [stepLoading, setStepLoading] = useState(false);
-  const [stepTitle, setStepTitle] = useState("");
-  const [stepContent, setStepContent] = useState("");
-  const [stepNotes, setStepNotes] = useState("");
-  const [stepType, setStepType] = useState("message");
+  const [newStepTitle, setNewStepTitle] = useState("");
+  const [newStepElementType, setNewStepElementType] = useState("MESSAGE");
+  const [stepCreating, setStepCreating] = useState(false);
 
-  // Edit step inline
-  const [editingStepId, setEditingStepId] = useState<string | null>(null);
-  const [editStepTitle, setEditStepTitle] = useState("");
-  const [editStepContent, setEditStepContent] = useState("");
-  const [editStepNotes, setEditStepNotes] = useState("");
-  const [editStepType, setEditStepType] = useState("message");
-  const [editStepLoading, setEditStepLoading] = useState(false);
+  // Add element dropdown
+  const [addElementStepId, setAddElementStepId] = useState<string | null>(null);
 
-  // Content dialog
-  const [contentDialogOpen, setContentDialogOpen] = useState(false);
-  const [contentLoading, setContentLoading] = useState(false);
-  const [contentType, setContentType] = useState("PHOTO");
-  const [contentDescription, setContentDescription] = useState("");
-  const [contentOutfit, setContentOutfit] = useState("");
-  const [contentDuration, setContentDuration] = useState("");
+  // Add media dialog
+  const [mediaDialogOpen, setMediaDialogOpen] = useState(false);
+  const [mediaElementId, setMediaElementId] = useState<string | null>(null);
+  const [mediaType, setMediaType] = useState("PHOTO");
+  const [mediaDescription, setMediaDescription] = useState("");
+  const [mediaOutfit, setMediaOutfit] = useState("");
+  const [mediaDuration, setMediaDuration] = useState("");
+  const [mediaCreating, setMediaCreating] = useState(false);
 
-  // Infos edit
-  const [editDescription, setEditDescription] = useState("");
-  const [editTargetPrice, setEditTargetPrice] = useState("");
-  const [infosSaving, setInfosSaving] = useState(false);
+  // ——— Data fetching ———
 
   const fetchScript = useCallback(async () => {
-    const res = await fetch(`/api/scripts/${params.id}`);
-    const json = await res.json();
-    if (json.success) {
-      setScript(json.data);
-      setEditDescription(json.data.description || "");
-      setEditTargetPrice(
-        json.data.targetPrice !== undefined && json.data.targetPrice !== null
-          ? String(json.data.targetPrice)
-          : ""
-      );
+    try {
+      const res = await fetch(`/api/scripts/${params.id}`);
+      const json = await res.json();
+      if (json.success) {
+        setScript(json.data);
+      }
+    } catch (err) {
+      console.error("[Script] Erreur chargement:", err);
     }
     setLoading(false);
   }, [params.id]);
@@ -208,146 +238,200 @@ export default function AdminScriptDetailPage() {
     fetchScript();
   }, [fetchScript]);
 
-  // Status change
-  async function handleStatusChange(newStatus: "DRAFT" | "VALIDATED") {
-    const res = await fetch(`/api/scripts/${params.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: newStatus }),
-    });
-    const json = await res.json();
-    if (json.success) fetchScript();
+  // ——— Script-level mutations ———
+
+  async function handleSaveName() {
+    if (!nameValue.trim() || !script) return;
+    try {
+      await fetch(`/api/scripts/${params.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nameValue.trim() }),
+      });
+      setEditingName(false);
+      fetchScript();
+    } catch (err) {
+      console.error("[Script] Erreur sauvegarde nom:", err);
+    }
   }
 
-  // Delete script
+  async function handleStatusChange(newStatus: "DRAFT" | "VALIDATED") {
+    try {
+      await fetch(`/api/scripts/${params.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      fetchScript();
+    } catch (err) {
+      console.error("[Script] Erreur changement statut:", err);
+    }
+  }
+
+  async function handleDuplicate() {
+    try {
+      const res = await fetch(`/api/scripts/${params.id}/duplicate`, {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (json.success) {
+        router.push(`/admin/scripts/${json.data.id}`);
+      }
+    } catch (err) {
+      console.error("[Script] Erreur duplication:", err);
+    }
+  }
+
   async function handleDelete() {
     if (!confirm("Supprimer ce script ? Cette action est irréversible.")) return;
-    await fetch(`/api/scripts/${params.id}`, { method: "DELETE" });
-    router.push("/admin/scripts");
+    try {
+      await fetch(`/api/scripts/${params.id}`, { method: "DELETE" });
+      router.push("/admin/scripts");
+    } catch (err) {
+      console.error("[Script] Erreur suppression:", err);
+    }
   }
 
-  // Add step
+  // ——— Step mutations ———
+
   async function handleAddStep(e: React.FormEvent) {
     e.preventDefault();
-    if (!stepContent.trim()) return;
-    setStepLoading(true);
-
-    const res = await fetch(`/api/scripts/${params.id}/steps`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: stepTitle.trim() || undefined,
-        content: stepContent.trim(),
-        notes: stepNotes.trim() || undefined,
-        type: stepType,
-      }),
-    });
-    const json = await res.json();
-    if (json.success) {
-      setStepDialogOpen(false);
-      setStepTitle("");
-      setStepContent("");
-      setStepNotes("");
-      setStepType("message");
-      fetchScript();
+    setStepCreating(true);
+    try {
+      const res = await fetch(`/api/scripts/${params.id}/steps`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newStepTitle.trim() || `Étape ${(script?.steps.length || 0) + 1}`,
+          elements: [{ type: newStepElementType }],
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setStepDialogOpen(false);
+        setNewStepTitle("");
+        setNewStepElementType("MESSAGE");
+        fetchScript();
+      }
+    } catch (err) {
+      console.error("[Script] Erreur ajout étape:", err);
     }
-    setStepLoading(false);
+    setStepCreating(false);
   }
 
-  // Edit step
-  function startEditStep(step: ScriptStep) {
-    setEditingStepId(step.id);
-    setEditStepTitle(step.title || "");
-    setEditStepContent(step.content);
-    setEditStepNotes(step.notes || "");
-    setEditStepType(step.type);
-  }
-
-  async function handleSaveStep() {
-    if (!editingStepId || !editStepContent.trim()) return;
-    setEditStepLoading(true);
-
-    const res = await fetch(`/api/scripts/${params.id}/steps/${editingStepId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: editStepTitle.trim() || undefined,
-        content: editStepContent.trim(),
-        notes: editStepNotes.trim() || undefined,
-        type: editStepType,
-      }),
-    });
-    const json = await res.json();
-    if (json.success) {
-      setEditingStepId(null);
-      fetchScript();
-    }
-    setEditStepLoading(false);
-  }
-
-  // Delete step
   async function handleDeleteStep(stepId: string) {
-    if (!confirm("Supprimer cette étape ?")) return;
-    const res = await fetch(`/api/scripts/${params.id}/steps/${stepId}`, {
-      method: "DELETE",
-    });
-    const json = await res.json();
-    if (json.success) fetchScript();
-  }
-
-  // Add content task
-  async function handleAddContent(e: React.FormEvent) {
-    e.preventDefault();
-    if (!contentDescription.trim()) return;
-    setContentLoading(true);
-
-    const res = await fetch(`/api/scripts/${params.id}/content`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contentType,
-        description: contentDescription.trim(),
-        outfit: contentOutfit.trim() || undefined,
-        duration: contentDuration.trim() || undefined,
-      }),
-    });
-    const json = await res.json();
-    if (json.success) {
-      setContentDialogOpen(false);
-      setContentType("PHOTO");
-      setContentDescription("");
-      setContentOutfit("");
-      setContentDuration("");
+    if (!confirm("Supprimer cette étape et tous ses éléments ?")) return;
+    try {
+      await fetch(`/api/scripts/steps/${stepId}`, { method: "DELETE" });
       fetchScript();
+    } catch (err) {
+      console.error("[Script] Erreur suppression étape:", err);
     }
-    setContentLoading(false);
   }
 
-  // Delete content task
-  async function handleDeleteContent(contentId: string) {
-    if (!confirm("Supprimer ce contenu ?")) return;
-    const res = await fetch(`/api/scripts/content/${contentId}`, {
-      method: "DELETE",
-    });
-    const json = await res.json();
-    if (json.success) fetchScript();
+  async function handleSaveStepTitle(stepId: string, title: string) {
+    try {
+      await fetch(`/api/scripts/steps/${stepId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      fetchScript();
+    } catch (err) {
+      console.error("[Script] Erreur sauvegarde titre étape:", err);
+    }
   }
 
-  // Save infos
-  async function handleSaveInfos() {
-    setInfosSaving(true);
-    const res = await fetch(`/api/scripts/${params.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        description: editDescription.trim() || undefined,
-        targetPrice: editTargetPrice ? parseFloat(editTargetPrice) : undefined,
-      }),
-    });
-    const json = await res.json();
-    if (json.success) fetchScript();
-    setInfosSaving(false);
+  // ——— Element mutations ———
+
+  async function handleAddElement(stepId: string, type: string) {
+    setAddElementStepId(null);
+    try {
+      await fetch(`/api/scripts/steps/${stepId}/elements`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type }),
+      });
+      fetchScript();
+    } catch (err) {
+      console.error("[Script] Erreur ajout élément:", err);
+    }
   }
+
+  async function handleDeleteElement(elementId: string) {
+    if (!confirm("Supprimer cet élément ?")) return;
+    try {
+      await fetch(`/api/scripts/elements/${elementId}`, { method: "DELETE" });
+      fetchScript();
+    } catch (err) {
+      console.error("[Script] Erreur suppression élément:", err);
+    }
+  }
+
+  async function handleUpdateElement(
+    elementId: string,
+    data: Record<string, unknown>
+  ) {
+    try {
+      await fetch(`/api/scripts/elements/${elementId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      fetchScript();
+    } catch (err) {
+      console.error("[Script] Erreur mise à jour élément:", err);
+    }
+  }
+
+  // ——— Media mutations ———
+
+  function openMediaDialog(elementId: string) {
+    setMediaElementId(elementId);
+    setMediaType("PHOTO");
+    setMediaDescription("");
+    setMediaOutfit("");
+    setMediaDuration("");
+    setMediaDialogOpen(true);
+  }
+
+  async function handleAddMedia(e: React.FormEvent) {
+    e.preventDefault();
+    if (!mediaElementId || !mediaDescription.trim()) return;
+    setMediaCreating(true);
+    try {
+      const res = await fetch(`/api/scripts/elements/${mediaElementId}/medias`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mediaType: mediaType,
+          description: mediaDescription.trim(),
+          outfit: mediaOutfit.trim() || undefined,
+          duration: mediaDuration.trim() || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setMediaDialogOpen(false);
+        fetchScript();
+      }
+    } catch (err) {
+      console.error("[Script] Erreur ajout média:", err);
+    }
+    setMediaCreating(false);
+  }
+
+  async function handleDeleteMedia(mediaId: string) {
+    if (!confirm("Supprimer ce média ?")) return;
+    try {
+      await fetch(`/api/scripts/medias/${mediaId}`, { method: "DELETE" });
+      fetchScript();
+    } catch (err) {
+      console.error("[Script] Erreur suppression média:", err);
+    }
+  }
+
+  // ——— Loading / error states ———
 
   if (loading) {
     return (
@@ -365,12 +449,9 @@ export default function AdminScriptDetailPage() {
     );
   }
 
-  const contentTotal = script.contentTasks.length;
-  const contentDone = script.contentTasks.filter(
-    (c) => c.status === "COMPLETED"
-  ).length;
-  const contentPercent =
-    contentTotal > 0 ? Math.round((contentDone / contentTotal) * 100) : 0;
+  const totalPrice = computeTotalPrice(script.steps);
+  const { total: mediaTotal, completed: mediaCompleted } = computeMediaCounts(script.steps);
+  const mediaPercent = mediaTotal > 0 ? Math.round((mediaCompleted / mediaTotal) * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -381,10 +462,33 @@ export default function AdminScriptDetailPage() {
       </Button>
 
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-2">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-3">
+          {/* Name - inline editable */}
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold tracking-tight">{script.name}</h1>
+            {editingName ? (
+              <Input
+                autoFocus
+                className="text-2xl font-bold h-auto py-1 px-2 w-[300px]"
+                value={nameValue}
+                onChange={(e) => setNameValue(e.target.value)}
+                onBlur={handleSaveName}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveName();
+                  if (e.key === "Escape") setEditingName(false);
+                }}
+              />
+            ) : (
+              <h1
+                className="text-2xl font-bold tracking-tight cursor-pointer hover:text-primary/80 transition-colors"
+                onClick={() => {
+                  setNameValue(script.name);
+                  setEditingName(true);
+                }}
+              >
+                {script.name}
+              </h1>
+            )}
             <Badge
               variant="secondary"
               className={cn("text-xs", CATEGORY_COLORS[script.category])}
@@ -403,359 +507,112 @@ export default function AdminScriptDetailPage() {
               {script.status === "VALIDATED" ? "Validé" : "Brouillon"}
             </Badge>
           </div>
-          <p className="text-sm text-muted-foreground">
-            {script.model.stageName}
-          </p>
+
+          {/* Model */}
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Avatar className="h-6 w-6">
+              <AvatarImage src={script.model.photoUrl || undefined} />
+              <AvatarFallback className="text-[10px]">
+                {script.model.stageName.slice(0, 2).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <span>{script.model.stageName}</span>
+          </div>
+
+          {/* Total price */}
+          {totalPrice > 0 && (
+            <p className="text-sm font-medium">
+              Prix total : {totalPrice}$
+            </p>
+          )}
+
+          {/* Progress */}
+          {mediaTotal > 0 && (
+            <div className="flex items-center gap-3 max-w-xs">
+              <Progress value={mediaPercent} className="h-2 flex-1" />
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                {mediaCompleted}/{mediaTotal} médias
+              </span>
+            </div>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Actions */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={handleDuplicate}>
+            <Copy className="mr-2 h-4 w-4" />
+            Dupliquer
+          </Button>
           {script.status === "DRAFT" ? (
-            <Button
-              variant="default"
-              onClick={() => handleStatusChange("VALIDATED")}
-            >
+            <Button size="sm" onClick={() => handleStatusChange("VALIDATED")}>
               <CheckCircle2 className="mr-2 h-4 w-4" />
               Valider
             </Button>
           ) : (
             <Button
               variant="outline"
+              size="sm"
               onClick={() => handleStatusChange("DRAFT")}
             >
               <FileEdit className="mr-2 h-4 w-4" />
               Repasser en brouillon
             </Button>
           )}
-          <Button variant="destructive" onClick={handleDelete}>
+          <Button variant="destructive" size="sm" onClick={handleDelete}>
             <Trash2 className="mr-2 h-4 w-4" />
             Supprimer
           </Button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="script">
-        <TabsList>
-          <TabsTrigger value="script">Script</TabsTrigger>
-          <TabsTrigger value="contenus">Contenus</TabsTrigger>
-          <TabsTrigger value="infos">Infos</TabsTrigger>
-        </TabsList>
+      <Separator />
 
-        {/* Tab Script (Steps) */}
-        <TabsContent value="script" className="space-y-4 mt-4">
-          {script.steps.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12">
-              <Send className="mb-3 h-10 w-10 text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground mb-3">
-                Aucune étape pour le moment
-              </p>
-              <Button onClick={() => setStepDialogOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Ajouter une étape
-              </Button>
-            </div>
-          ) : (
-            <>
-              <div className="space-y-3">
-                {script.steps
-                  .sort((a, b) => a.sortOrder - b.sortOrder)
-                  .map((step, index) => (
-                    <Card key={step.id}>
-                      <CardContent className="p-4">
-                        {editingStepId === step.id ? (
-                          /* Inline edit mode */
-                          <div className="space-y-3">
-                            <div className="flex items-center gap-3">
-                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
-                                {index + 1}
-                              </span>
-                              <Select
-                                value={editStepType}
-                                onValueChange={setEditStepType}
-                              >
-                                <SelectTrigger className="w-[180px]">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="message">Message</SelectItem>
-                                  <SelectItem value="free_content">Contenu gratuit</SelectItem>
-                                  <SelectItem value="paid_content">Contenu payant</SelectItem>
-                                  <SelectItem value="vocal">Vocal</SelectItem>
-                                  <SelectItem value="wait">Attente</SelectItem>
-                                  <SelectItem value="internal_note">Note interne</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <Input
-                              placeholder="Titre (optionnel)"
-                              value={editStepTitle}
-                              onChange={(e) => setEditStepTitle(e.target.value)}
-                            />
-                            <Textarea
-                              placeholder="Contenu du message"
-                              value={editStepContent}
-                              onChange={(e) => setEditStepContent(e.target.value)}
-                              rows={3}
-                              required
-                            />
-                            <Textarea
-                              placeholder="Notes internes (optionnel)"
-                              value={editStepNotes}
-                              onChange={(e) => setEditStepNotes(e.target.value)}
-                              rows={2}
-                            />
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setEditingStepId(null)}
-                              >
-                                Annuler
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={handleSaveStep}
-                                disabled={editStepLoading}
-                              >
-                                {editStepLoading && (
-                                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                                )}
-                                Sauvegarder
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          /* Display mode */
-                          <div className="flex items-start gap-3">
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-bold">
-                              {index + 1}
-                            </span>
-                            <div className="flex-1 space-y-1">
-                              <div className="flex items-center gap-2">
-                                {step.title && (
-                                  <span className="font-semibold">
-                                    {step.title}
-                                  </span>
-                                )}
-                                <Badge variant="outline" className="text-xs gap-1">
-                                  {STEP_TYPE_ICONS[step.type]}
-                                  {STEP_TYPE_LABELS[step.type] || step.type}
-                                </Badge>
-                              </div>
-                              <p className="text-sm whitespace-pre-wrap">
-                                {step.content}
-                              </p>
-                              {step.notes && (
-                                <p className="text-sm italic text-muted-foreground">
-                                  {step.notes}
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => startEditStep(step)}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-destructive hover:text-destructive"
-                                onClick={() => handleDeleteStep(step.id)}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  ))}
-              </div>
+      {/* Timeline */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Timeline</h2>
 
-              <Button
-                variant="outline"
-                onClick={() => setStepDialogOpen(true)}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Ajouter une étape
-              </Button>
-            </>
-          )}
-        </TabsContent>
-
-        {/* Tab Contenus */}
-        <TabsContent value="contenus" className="space-y-4 mt-4">
-          {contentTotal > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">
-                  {contentDone}/{contentTotal} contenus produits
-                </span>
-                <span className="font-medium">{contentPercent}%</span>
-              </div>
-              <Progress value={contentPercent} className="h-2" />
-            </div>
-          )}
-
-          {script.contentTasks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12">
-              <Image className="mb-3 h-10 w-10 text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground mb-3">
-                Aucun contenu requis pour le moment
-              </p>
-              <Button onClick={() => setContentDialogOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Ajouter un contenu
-              </Button>
-            </div>
-          ) : (
-            <>
-              <div className="space-y-3">
-                {script.contentTasks.map((task) => (
-                  <Card key={task.id}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="flex items-center gap-1.5 text-sm font-medium">
-                              {CONTENT_TYPE_ICONS[task.contentType]}
-                              {CONTENT_TYPE_LABELS[task.contentType] || task.contentType}
-                            </span>
-                            <Badge
-                              variant="secondary"
-                              className={cn(
-                                "text-xs",
-                                CONTENT_STATUS_COLORS[task.status]
-                              )}
-                            >
-                              {CONTENT_STATUS_LABELS[task.status] || task.status}
-                            </Badge>
-                          </div>
-                          <p className="text-sm">{task.description}</p>
-                          {task.outfit && (
-                            <p className="text-xs text-muted-foreground">
-                              Tenue : {task.outfit}
-                            </p>
-                          )}
-                          {task.duration && (
-                            <p className="text-xs text-muted-foreground">
-                              Durée : {task.duration}
-                            </p>
-                          )}
-                          {task.driveLink && (
-                            <a
-                              href={task.driveLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-blue-600 hover:underline"
-                            >
-                              Lien Drive
-                            </a>
-                          )}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive shrink-0"
-                          onClick={() => handleDeleteContent(task.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-
-              <Button
-                variant="outline"
-                onClick={() => setContentDialogOpen(true)}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Ajouter un contenu
-              </Button>
-            </>
-          )}
-        </TabsContent>
-
-        {/* Tab Infos */}
-        <TabsContent value="infos" className="space-y-4 mt-4">
-          <Card>
-            <CardContent className="p-6 space-y-5">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Description</label>
-                <Textarea
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  placeholder="Description du script..."
-                  rows={4}
+        {script.steps.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12">
+            <MessageSquare className="mb-3 h-10 w-10 text-muted-foreground/50" />
+            <p className="text-sm text-muted-foreground mb-3">
+              Aucune étape pour le moment
+            </p>
+            <Button onClick={() => setStepDialogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Ajouter une étape
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {script.steps
+              .sort((a, b) => a.order - b.order)
+              .map((step, stepIndex) => (
+                <StepCard
+                  key={step.id}
+                  step={step}
+                  stepIndex={stepIndex}
+                  addElementStepId={addElementStepId}
+                  setAddElementStepId={setAddElementStepId}
+                  onDeleteStep={handleDeleteStep}
+                  onSaveStepTitle={handleSaveStepTitle}
+                  onAddElement={handleAddElement}
+                  onDeleteElement={handleDeleteElement}
+                  onUpdateElement={handleUpdateElement}
+                  onOpenMediaDialog={openMediaDialog}
+                  onDeleteMedia={handleDeleteMedia}
                 />
-              </div>
+              ))}
+          </div>
+        )}
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Prix cible ($)</label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={editTargetPrice}
-                  onChange={(e) => setEditTargetPrice(e.target.value)}
-                  placeholder="Ex: 200"
-                />
-              </div>
-
-              <Separator />
-
-              {script.tags.length > 0 && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Tags</label>
-                  <div className="flex flex-wrap gap-2">
-                    {script.tags.map((tag) => (
-                      <Badge key={tag} variant="secondary" className="text-xs">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Créé le</span>
-                  <p className="font-medium">
-                    {format(new Date(script.createdAt), "d MMMM yyyy 'à' HH:mm", {
-                      locale: fr,
-                    })}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Modifié le</span>
-                  <p className="font-medium">
-                    {format(new Date(script.updatedAt), "d MMMM yyyy 'à' HH:mm", {
-                      locale: fr,
-                    })}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex justify-end">
-                <Button onClick={handleSaveInfos} disabled={infosSaving}>
-                  {infosSaving ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="mr-2 h-4 w-4" />
-                  )}
-                  Sauvegarder
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+        {/* Add step button */}
+        {script.steps.length > 0 && (
+          <Button variant="outline" onClick={() => setStepDialogOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Ajouter une étape
+          </Button>
+        )}
+      </div>
 
       {/* Add Step Dialog */}
       <Dialog open={stepDialogOpen} onOpenChange={setStepDialogOpen}>
@@ -765,50 +622,29 @@ export default function AdminScriptDetailPage() {
           </DialogHeader>
           <form onSubmit={handleAddStep} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Titre (optionnel)</label>
+              <label className="text-sm font-medium">Titre</label>
               <Input
-                placeholder="Ex: Accroche initiale"
-                value={stepTitle}
-                onChange={(e) => setStepTitle(e.target.value)}
+                placeholder={`Étape ${(script?.steps.length || 0) + 1}`}
+                value={newStepTitle}
+                onChange={(e) => setNewStepTitle(e.target.value)}
               />
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">
-                Contenu <span className="text-destructive">*</span>
-              </label>
-              <Textarea
-                placeholder="Le texte du message ou la description..."
-                value={stepContent}
-                onChange={(e) => setStepContent(e.target.value)}
-                rows={4}
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Notes (optionnel)</label>
-              <Textarea
-                placeholder="Notes internes, conseils..."
-                value={stepNotes}
-                onChange={(e) => setStepNotes(e.target.value)}
-                rows={2}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Type</label>
-              <Select value={stepType} onValueChange={setStepType}>
+              <label className="text-sm font-medium">Premier élément</label>
+              <Select
+                value={newStepElementType}
+                onValueChange={setNewStepElementType}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="message">Message</SelectItem>
-                  <SelectItem value="free_content">Contenu gratuit</SelectItem>
-                  <SelectItem value="paid_content">Contenu payant</SelectItem>
-                  <SelectItem value="vocal">Vocal</SelectItem>
-                  <SelectItem value="wait">Attente</SelectItem>
-                  <SelectItem value="internal_note">Note interne</SelectItem>
+                  {ELEMENT_TYPES.map((et) => (
+                    <SelectItem key={et.value} value={et.value}>
+                      {et.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -821,8 +657,8 @@ export default function AdminScriptDetailPage() {
               >
                 Annuler
               </Button>
-              <Button type="submit" disabled={stepLoading}>
-                {stepLoading && (
+              <Button type="submit" disabled={stepCreating}>
+                {stepCreating && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
                 Ajouter
@@ -832,16 +668,16 @@ export default function AdminScriptDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Add Content Dialog */}
-      <Dialog open={contentDialogOpen} onOpenChange={setContentDialogOpen}>
+      {/* Add Media Dialog */}
+      <Dialog open={mediaDialogOpen} onOpenChange={setMediaDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Ajouter un contenu</DialogTitle>
+            <DialogTitle>Ajouter un média</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleAddContent} className="space-y-4">
+          <form onSubmit={handleAddMedia} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Type de contenu</label>
-              <Select value={contentType} onValueChange={setContentType}>
+              <label className="text-sm font-medium">Type de média</label>
+              <Select value={mediaType} onValueChange={setMediaType}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -849,7 +685,6 @@ export default function AdminScriptDetailPage() {
                   <SelectItem value="PHOTO">Photo</SelectItem>
                   <SelectItem value="VIDEO">Vidéo</SelectItem>
                   <SelectItem value="AUDIO">Audio</SelectItem>
-                  <SelectItem value="COMBO">Combo</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -858,30 +693,29 @@ export default function AdminScriptDetailPage() {
               <label className="text-sm font-medium">
                 Description <span className="text-destructive">*</span>
               </label>
-              <Textarea
+              <Input
                 placeholder="Décrivez le contenu à produire..."
-                value={contentDescription}
-                onChange={(e) => setContentDescription(e.target.value)}
-                rows={3}
+                value={mediaDescription}
+                onChange={(e) => setMediaDescription(e.target.value)}
                 required
               />
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Tenue (optionnel)</label>
+              <label className="text-sm font-medium">Tenue</label>
               <Input
                 placeholder="Ex: Lingerie noire"
-                value={contentOutfit}
-                onChange={(e) => setContentOutfit(e.target.value)}
+                value={mediaOutfit}
+                onChange={(e) => setMediaOutfit(e.target.value)}
               />
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Durée (optionnel)</label>
+              <label className="text-sm font-medium">Durée</label>
               <Input
                 placeholder="Ex: 30 secondes"
-                value={contentDuration}
-                onChange={(e) => setContentDuration(e.target.value)}
+                value={mediaDuration}
+                onChange={(e) => setMediaDuration(e.target.value)}
               />
             </div>
 
@@ -889,12 +723,12 @@ export default function AdminScriptDetailPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setContentDialogOpen(false)}
+                onClick={() => setMediaDialogOpen(false)}
               >
                 Annuler
               </Button>
-              <Button type="submit" disabled={contentLoading}>
-                {contentLoading && (
+              <Button type="submit" disabled={mediaCreating}>
+                {mediaCreating && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
                 Ajouter
@@ -903,6 +737,330 @@ export default function AdminScriptDetailPage() {
           </form>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ——— StepCard sub-component ———
+
+function StepCard({
+  step,
+  stepIndex,
+  addElementStepId,
+  setAddElementStepId,
+  onDeleteStep,
+  onSaveStepTitle,
+  onAddElement,
+  onDeleteElement,
+  onUpdateElement,
+  onOpenMediaDialog,
+  onDeleteMedia,
+}: {
+  step: ScriptStep;
+  stepIndex: number;
+  addElementStepId: string | null;
+  setAddElementStepId: (id: string | null) => void;
+  onDeleteStep: (stepId: string) => void;
+  onSaveStepTitle: (stepId: string, title: string) => void;
+  onAddElement: (stepId: string, type: string) => void;
+  onDeleteElement: (elementId: string) => void;
+  onUpdateElement: (elementId: string, data: Record<string, unknown>) => void;
+  onOpenMediaDialog: (elementId: string) => void;
+  onDeleteMedia: (mediaId: string) => void;
+}) {
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleValue, setTitleValue] = useState(step.title);
+
+  function saveTitle() {
+    if (titleValue.trim() && titleValue.trim() !== step.title) {
+      onSaveStepTitle(step.id, titleValue.trim());
+    }
+    setEditingTitle(false);
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        {/* Step header */}
+        <div className="flex items-center gap-3">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-black text-white text-sm font-bold dark:bg-white dark:text-black">
+            {stepIndex + 1}
+          </span>
+          {editingTitle ? (
+            <Input
+              autoFocus
+              className="font-semibold h-8 text-sm flex-1"
+              value={titleValue}
+              onChange={(e) => setTitleValue(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveTitle();
+                if (e.key === "Escape") {
+                  setTitleValue(step.title);
+                  setEditingTitle(false);
+                }
+              }}
+            />
+          ) : (
+            <span
+              className="font-semibold text-sm cursor-pointer hover:text-primary/80 transition-colors flex-1"
+              onClick={() => {
+                setTitleValue(step.title);
+                setEditingTitle(true);
+              }}
+            >
+              {step.title}
+            </span>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-destructive hover:text-destructive shrink-0"
+            onClick={() => onDeleteStep(step.id)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Elements */}
+        <div className="space-y-2 pl-11">
+          {step.elements
+            .sort((a, b) => a.order - b.order)
+            .map((element) => (
+              <ElementCard
+                key={element.id}
+                element={element}
+                onDelete={onDeleteElement}
+                onUpdate={onUpdateElement}
+                onOpenMediaDialog={onOpenMediaDialog}
+                onDeleteMedia={onDeleteMedia}
+              />
+            ))}
+        </div>
+
+        {/* Add element */}
+        <div className="pl-11 relative">
+          {addElementStepId === step.id ? (
+            <div className="flex flex-wrap gap-2 p-2 rounded-md border bg-background">
+              {ELEMENT_TYPES.map((et) => {
+                const Icon = et.icon;
+                return (
+                  <Button
+                    key={et.value}
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-xs"
+                    onClick={() => onAddElement(step.id, et.value)}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {et.label}
+                  </Button>
+                );
+              })}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                onClick={() => setAddElementStepId(null)}
+              >
+                Annuler
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs text-muted-foreground"
+              onClick={() => setAddElementStepId(step.id)}
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Ajouter
+              <ChevronDown className="ml-1 h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ——— ElementCard sub-component ———
+
+function ElementCard({
+  element,
+  onDelete,
+  onUpdate,
+  onOpenMediaDialog,
+  onDeleteMedia,
+}: {
+  element: ScriptElement;
+  onDelete: (id: string) => void;
+  onUpdate: (id: string, data: Record<string, unknown>) => void;
+  onOpenMediaDialog: (elementId: string) => void;
+  onDeleteMedia: (mediaId: string) => void;
+}) {
+  const classes = getElementClasses(element.type);
+
+  return (
+    <div className={cn("rounded-md p-3 relative group", classes)}>
+      {/* Delete button */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-6 w-6 absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+        onClick={() => onDelete(element.id)}
+      >
+        <X className="h-3.5 w-3.5" />
+      </Button>
+
+      {/* Element type label */}
+      <p className="text-[10px] uppercase font-semibold tracking-wider text-muted-foreground mb-1.5">
+        {ELEMENT_TYPE_LABELS[element.type] || element.type}
+      </p>
+
+      {/* Content by type */}
+      {element.type === "MESSAGE" && (
+        <Textarea
+          className="bg-transparent border-0 p-0 resize-none text-sm min-h-[40px] focus-visible:ring-0 focus-visible:ring-offset-0"
+          placeholder="Écrivez le message..."
+          defaultValue={element.messageText || ""}
+          rows={2}
+          onBlur={(e) => {
+            if (e.target.value !== (element.messageText || "")) {
+              onUpdate(element.id, { messageText: e.target.value });
+            }
+          }}
+        />
+      )}
+
+      {element.type === "FREE_CONTENT" && (
+        <div className="space-y-2">
+          {/* Media list */}
+          <MediaList
+            medias={element.medias}
+            onDeleteMedia={onDeleteMedia}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs"
+            onClick={() => onOpenMediaDialog(element.id)}
+          >
+            <Plus className="mr-1.5 h-3 w-3" />
+            Média
+          </Button>
+        </div>
+      )}
+
+      {element.type === "PAID_CONTENT" && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Prix :</span>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              className="h-7 w-24 text-sm"
+              placeholder="0"
+              defaultValue={element.price || ""}
+              onBlur={(e) => {
+                const val = parseFloat(e.target.value);
+                if (!isNaN(val) && val !== (element.price || 0)) {
+                  onUpdate(element.id, { price: val });
+                }
+              }}
+            />
+            <span className="text-xs text-muted-foreground">$</span>
+          </div>
+          {/* Media list */}
+          <MediaList
+            medias={element.medias}
+            onDeleteMedia={onDeleteMedia}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs"
+            onClick={() => onOpenMediaDialog(element.id)}
+          >
+            <Plus className="mr-1.5 h-3 w-3" />
+            Média
+          </Button>
+        </div>
+      )}
+
+      {element.type === "WAIT" && (
+        <Input
+          className="bg-transparent border-0 p-0 h-auto text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+          placeholder="Ex: Attendre 5 min, attendre réponse..."
+          defaultValue={element.waitDescription || ""}
+          onBlur={(e) => {
+            if (e.target.value !== (element.waitDescription || "")) {
+              onUpdate(element.id, { waitDescription: e.target.value });
+            }
+          }}
+        />
+      )}
+
+      {element.type === "NOTE" && (
+        <Textarea
+          className="bg-transparent border-0 p-0 resize-none text-sm italic min-h-[40px] focus-visible:ring-0 focus-visible:ring-offset-0"
+          placeholder="Note interne..."
+          defaultValue={element.noteText || ""}
+          rows={2}
+          onBlur={(e) => {
+            if (e.target.value !== (element.noteText || "")) {
+              onUpdate(element.id, { noteText: e.target.value });
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ——— MediaList sub-component ———
+
+function MediaList({
+  medias,
+  onDeleteMedia,
+}: {
+  medias: ScriptMedia[];
+  onDeleteMedia: (id: string) => void;
+}) {
+  if (medias.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {medias
+        .sort((a, b) => a.order - b.order)
+        .map((media) => {
+          const Icon = MEDIA_TYPE_ICONS[media.mediaType] || Camera;
+          return (
+            <div
+              key={media.id}
+              className="flex items-center gap-1.5 rounded-full border bg-background px-2.5 py-1 text-xs group/media"
+            >
+              <Icon className="h-3 w-3 shrink-0" />
+              <span className="max-w-[120px] truncate">{media.description}</span>
+              <Badge
+                variant="secondary"
+                className={cn(
+                  "text-[10px] px-1.5 py-0",
+                  MEDIA_STATUS_COLORS[media.status]
+                )}
+              >
+                {MEDIA_STATUS_LABELS[media.status] || media.status}
+              </Badge>
+              <button
+                className="opacity-0 group-hover/media:opacity-100 transition-opacity text-destructive hover:text-destructive/80"
+                onClick={() => onDeleteMedia(media.id)}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          );
+        })}
     </div>
   );
 }
