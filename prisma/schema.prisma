@@ -425,10 +425,13 @@ model ChatterPayroll {
   tipsMessagesGenerated Float    @default(0)
   commissionPercent     Float    @default(0)
   commissionAmount      Float    @default(0)
+  adjustmentsTotal      Float    @default(0)
   totalPay              Float
   status                String   @default("DRAFT") // DRAFT | VALIDATED | PAID
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+
+  adjustments PayrollAdjustment[]
 
   @@unique([chatterId, periodStart])
   @@index([chatterId])
@@ -530,6 +533,35 @@ model Notification {
   dismissedFromPopover Boolean  @default(false)
   link                 String?
   createdAt            DateTime @default(now())
+}
+
+model ImportLog {
+  id           String   @id @default(cuid())
+  type         String   // MODEL | CHATTER
+  fileName     String
+  modelId      String?
+  chatterId    String?
+  totalRows    Int      @default(0)
+  imported     Int      @default(0)
+  skipped      Int      @default(0)
+  errors       Json?
+  importedBy   String
+  createdAt    DateTime @default(now())
+
+  @@index([type])
+  @@index([importedBy])
+}
+
+model PayrollAdjustment {
+  id          String         @id @default(cuid())
+  payrollId   String
+  payroll     ChatterPayroll @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  description String
+  amount      Float
+  addedBy     String
+  createdAt   DateTime       @default(now())
+
+  @@index([payrollId])
 }
 
 model PushSubscription {

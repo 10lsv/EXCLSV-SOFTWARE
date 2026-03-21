@@ -26,14 +26,23 @@ export async function POST(req: NextRequest) {
     const rows = sheetToJson(sheet);
     let imported = 0;
     let skipped = 0;
+    const errors: Array<{ row: number; message: string }> = [];
 
-    for (const row of rows) {
-      const r = row as Record<string, unknown>;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i] as Record<string, unknown>;
       const date = parseChatterDate(r["Date/Time Europe/Brussels"] as string);
-      if (!date) { skipped++; continue; }
+      if (!date) {
+        errors.push({ row: i + 1, message: "Date invalide ou manquante" });
+        skipped++;
+        continue;
+      }
 
       const normalizedDate = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
       const salesGross = parseMoney(r["Sales"] as string);
+      const ppvSalesGross = parseMoney(r["PPV sales"] as string);
+      const tipsGross = parseMoney(r["Tips"] as string);
+      const messagesGross = parseMoney(r["Direct message sales"] as string);
+      const totalGross = salesGross + ppvSalesGross + tipsGross + messagesGross;
 
       try {
         await prisma.chatterDailyData.upsert({
@@ -42,10 +51,10 @@ export async function POST(req: NextRequest) {
           },
           update: {
             salesGross,
-            ppvSalesGross: parseMoney(r["PPV sales"] as string),
-            tipsGross: parseMoney(r["Tips"] as string),
-            messagesGross: parseMoney(r["Direct message sales"] as string),
-            totalGross: salesGross,
+            ppvSalesGross,
+            tipsGross,
+            messagesGross,
+            totalGross,
             scheduledHours: parseHours(r["Scheduled hours"] as string),
             clockedHours: parseHours(r["Clocked hours"] as string),
           },
@@ -54,25 +63,43 @@ export async function POST(req: NextRequest) {
             modelId,
             date: normalizedDate,
             salesGross,
-            ppvSalesGross: parseMoney(r["PPV sales"] as string),
-            tipsGross: parseMoney(r["Tips"] as string),
-            messagesGross: parseMoney(r["Direct message sales"] as string),
-            totalGross: salesGross,
+            ppvSalesGross,
+            tipsGross,
+            messagesGross,
+            totalGross,
             scheduledHours: parseHours(r["Scheduled hours"] as string),
             clockedHours: parseHours(r["Clocked hours"] as string),
           },
         });
         imported++;
-      } catch {
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        console.error(`[IMPORT CHATTER] Row ${i + 1} skipped:`, msg);
+        errors.push({ row: i + 1, message: msg });
         skipped++;
       }
     }
+
+    // Create ImportLog
+    await prisma.importLog.create({
+      data: {
+        type: "CHATTER",
+        fileName: file.name,
+        modelId,
+        chatterId,
+        totalRows: rows.length,
+        imported,
+        skipped,
+        errors: errors.length > 0 ? errors : undefined,
+        importedBy: session!.user.id,
+      },
+    });
 
     await logAudit(session!.user.id, "IMPORT_CHATTER_DATA", "ChatterDailyData", undefined, {
       chatterId, modelId, imported, skipped, totalRows: rows.length,
     });
 
-    return jsonSuccess({ imported, skipped, totalRows: rows.length });
+    return jsonSuccess({ imported, skipped, totalRows: rows.length, errors: errors.slice(0, 50) });
   } catch (err: unknown) {
     console.error("[IMPORT CHATTER]", err);
     return jsonError(err instanceof Error ? err.message : "Erreur interne", 500);
