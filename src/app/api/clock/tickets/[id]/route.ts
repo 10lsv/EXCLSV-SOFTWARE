@@ -4,7 +4,7 @@ import { Role } from "@prisma/client";
 import { jsonSuccess, jsonError, requireRole, logAudit } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notifications";
 
-// GET /api/clock/tickets/[id] — get ticket with screenshot
+// GET /api/clock/tickets/[id]
 export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } }
@@ -25,34 +25,57 @@ export async function GET(
   }
 }
 
-// PATCH /api/clock/tickets/[id] — admin resolves ticket
+// PATCH /api/clock/tickets/[id] — admin resolves OR chatter edits
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const { error, session } = await requireRole(Role.OWNER, Role.ADMIN);
+  const { error, session } = await requireRole(Role.OWNER, Role.ADMIN, Role.CHATTER);
   if (error) return error;
 
   try {
     const body = await req.json();
-    const { status, adminComment, adjustedClockIn, adjustedClockOut } = body;
-
-    if (!status || (status !== "APPROVED" && status !== "REJECTED")) {
-      return jsonError("status doit être APPROVED ou REJECTED");
-    }
-
-    if (status === "REJECTED" && !adminComment) {
-      return jsonError("adminComment obligatoire pour un rejet");
-    }
+    const role = session!.user.role as Role;
 
     const ticket = await prisma.clockTicket.findUnique({
       where: { id: params.id },
       include: { chatter: { select: { id: true, name: true } } },
     });
     if (!ticket) return jsonError("Ticket introuvable", 404);
-    if (ticket.status !== "PENDING") return jsonError("Ticket déjà traité", 400);
+    if (ticket.status !== "PENDING") return jsonError("Ce ticket a déjà été traité", 400);
 
-    // Update ticket
+    // Chatter editing their own ticket
+    if (role === Role.CHATTER) {
+      if (ticket.chatterId !== session!.user.id) return jsonError("Accès interdit", 403);
+
+      const updated = await prisma.clockTicket.update({
+        where: { id: params.id },
+        data: {
+          ...(body.shiftDate !== undefined && {
+            shiftDate: new Date(Date.UTC(
+              new Date(body.shiftDate).getUTCFullYear(),
+              new Date(body.shiftDate).getUTCMonth(),
+              new Date(body.shiftDate).getUTCDate()
+            )),
+          }),
+          ...(body.shiftType !== undefined && { shiftType: body.shiftType }),
+          ...(body.screenshotData !== undefined && { screenshotData: body.screenshotData }),
+          ...(body.comment !== undefined && { comment: body.comment || null }),
+        },
+      });
+      return jsonSuccess(updated);
+    }
+
+    // Admin resolving
+    const { status, adminComment, adjustedClockIn, adjustedClockOut } = body;
+
+    if (!status || (status !== "APPROVED" && status !== "REJECTED")) {
+      return jsonError("status doit être APPROVED ou REJECTED");
+    }
+    if (status === "REJECTED" && !adminComment) {
+      return jsonError("adminComment obligatoire pour un rejet");
+    }
+
     await prisma.clockTicket.update({
       where: { id: params.id },
       data: {
@@ -62,12 +85,11 @@ export async function PATCH(
         adjustedClockIn: adjustedClockIn ? new Date(adjustedClockIn) : null,
         adjustedClockOut: adjustedClockOut ? new Date(adjustedClockOut) : null,
         resolvedAt: new Date(),
-        screenshotData: null, // Free storage
+        screenshotData: null,
       },
     });
 
     if (status === "APPROVED" && adjustedClockIn) {
-      // Create ClockRecord from ticket
       try {
         await prisma.clockRecord.create({
           data: {
@@ -81,7 +103,6 @@ export async function PATCH(
           },
         });
       } catch {
-        // If clock record already exists, update it
         const existing = await prisma.clockRecord.findUnique({
           where: { chatterId_shiftDate: { chatterId: ticket.chatterId, shiftDate: ticket.shiftDate } },
         });
@@ -116,10 +137,35 @@ export async function PATCH(
     }
 
     await logAudit(session!.user.id, "RESOLVE_TICKET", "ClockTicket", params.id, { status, adminComment });
-
     return jsonSuccess({ resolved: true });
   } catch (err: unknown) {
     console.error("[TICKET PATCH]", err);
+    return jsonError(err instanceof Error ? err.message : "Erreur interne", 500);
+  }
+}
+
+// DELETE /api/clock/tickets/[id]
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const { error, session } = await requireRole(Role.OWNER, Role.ADMIN, Role.CHATTER);
+  if (error) return error;
+
+  try {
+    const ticket = await prisma.clockTicket.findUnique({ where: { id: params.id } });
+    if (!ticket) return jsonError("Ticket introuvable", 404);
+
+    const role = session!.user.role as Role;
+    if (role === Role.CHATTER) {
+      if (ticket.chatterId !== session!.user.id) return jsonError("Accès interdit", 403);
+      if (ticket.status !== "PENDING") return jsonError("Seuls les tickets en attente peuvent être supprimés", 400);
+    }
+
+    await prisma.clockTicket.delete({ where: { id: params.id } });
+    return jsonSuccess({ deleted: true });
+  } catch (err: unknown) {
+    console.error("[TICKET DELETE]", err);
     return jsonError(err instanceof Error ? err.message : "Erreur interne", 500);
   }
 }

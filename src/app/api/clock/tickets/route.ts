@@ -5,13 +5,22 @@ import { jsonSuccess, jsonError, requireRole } from "@/lib/api-utils";
 import { notifyAdmins } from "@/lib/notifications";
 
 // GET /api/clock/tickets
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   const { error, session } = await requireRole(Role.OWNER, Role.ADMIN, Role.CHATTER);
   if (error) return error;
 
   try {
     const role = session!.user.role as Role;
-    const where = role === Role.CHATTER ? { chatterId: session!.user.id } : {};
+    const showAll = req.nextUrl.searchParams.get("all") === "true";
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const where: Record<string, unknown> = {};
+    if (role === Role.CHATTER) {
+      where.chatterId = session!.user.id;
+      where.createdAt = { gte: thirtyDaysAgo };
+    } else if (!showAll) {
+      where.createdAt = { gte: thirtyDaysAgo };
+    }
 
     const tickets = await prisma.clockTicket.findMany({
       where,

@@ -26,6 +26,8 @@ import {
   LogOut,
   AlertCircle,
   Loader2,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { cn, getMondayUTC } from "@/lib/utils";
 import {
@@ -92,7 +94,9 @@ interface Ticket {
   shiftDate: string;
   shiftType: ShiftType;
   comment?: string;
+  screenshotData?: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
+  adminComment?: string;
   createdAt: string;
 }
 
@@ -135,6 +139,7 @@ export default function ChatterPlanningPage() {
   const [myShifts, setMyShifts] = useState<MyShift[]>([]);
 
   // Ticket dialog
+  const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
   const [ticketDate, setTicketDate] = useState("");
   const [ticketShiftType, setTicketShiftType] = useState("");
@@ -283,8 +288,12 @@ export default function ChatterPlanningPage() {
     if (!ticketDate || !ticketShiftType) return;
     setTicketLoading(true);
     try {
-      await fetch("/api/clock/tickets", {
-        method: "POST",
+      const url = editingTicket
+        ? `/api/clock/tickets/${editingTicket.id}`
+        : "/api/clock/tickets";
+      const method = editingTicket ? "PATCH" : "POST";
+      await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           shiftDate: ticketDate,
@@ -294,6 +303,7 @@ export default function ChatterPlanningPage() {
         }),
       });
       setTicketDialogOpen(false);
+      setEditingTicket(null);
       setTicketDate("");
       setTicketShiftType("");
       setTicketComment("");
@@ -303,6 +313,23 @@ export default function ChatterPlanningPage() {
       // ignore
     }
     setTicketLoading(false);
+  }
+
+  function startEditTicket(ticket: Ticket) {
+    setEditingTicket(ticket);
+    setTicketDate(ticket.shiftDate.split("T")[0]);
+    setTicketShiftType(ticket.shiftType);
+    setTicketComment(ticket.comment || "");
+    setTicketScreenshot(ticket.screenshotData || null);
+    setTicketDialogOpen(true);
+  }
+
+  async function handleDeleteTicket(id: string) {
+    if (!confirm("Supprimer cette demande ?")) return;
+    try {
+      await fetch(`/api/clock/tickets/${id}`, { method: "DELETE" });
+      fetchTickets();
+    } catch {}
   }
 
   /* --- Week helpers --- */
@@ -560,10 +587,10 @@ export default function ChatterPlanningPage() {
         </Button>
 
         {/* Ticket dialog */}
-        <Dialog open={ticketDialogOpen} onOpenChange={setTicketDialogOpen}>
+        <Dialog open={ticketDialogOpen} onOpenChange={(open) => { setTicketDialogOpen(open); if (!open) setEditingTicket(null); }}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Demande de correction</DialogTitle>
+              <DialogTitle>{editingTicket ? "Modifier la demande" : "Déclarer un oubli"}</DialogTitle>
             </DialogHeader>
 
             <div className="space-y-4 mt-2">
@@ -651,53 +678,81 @@ export default function ChatterPlanningPage() {
         </Dialog>
 
         {/* My tickets */}
-        {tickets.length > 0 && (
-          <div className="space-y-2">
-            <h3 className="text-sm font-medium text-muted-foreground">
-              Mes demandes
-            </h3>
-            {tickets.map((ticket) => (
-              <div
-                key={ticket.id}
-                className="flex items-center gap-3 rounded-lg border px-3 py-2"
-              >
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "text-xs shrink-0",
-                    ticket.status === "PENDING" &&
-                      "border-orange-300 text-orange-600",
-                    ticket.status === "APPROVED" &&
-                      "border-emerald-300 text-emerald-600",
-                    ticket.status === "REJECTED" &&
-                      "border-red-300 text-red-600"
+        {tickets.length > 0 && (() => {
+          const pendingTickets = tickets
+            .filter((t) => t.status === "PENDING")
+            .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+          const resolvedTickets = tickets
+            .filter((t) => t.status !== "PENDING")
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          const sortedTickets = [...pendingTickets, ...resolvedTickets];
+          const firstResolvedIndex = pendingTickets.length;
+
+          return (
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-muted-foreground">
+                Mes demandes
+              </h3>
+              {sortedTickets.map((ticket, index) => (
+                <div key={ticket.id}>
+                  {index === firstResolvedIndex && firstResolvedIndex > 0 && resolvedTickets.length > 0 && (
+                    <div className="flex items-center gap-3 py-2">
+                      <div className="h-px flex-1 bg-border" />
+                      <span className="text-xs text-muted-foreground">Traitées</span>
+                      <div className="h-px flex-1 bg-border" />
+                    </div>
                   )}
-                >
-                  {ticket.status === "PENDING"
-                    ? "En attente"
-                    : ticket.status === "APPROVED"
-                    ? "Approuve"
-                    : "Rejete"}
-                </Badge>
-                <span className="text-sm">
-                  {ticket.shiftDate
-                    ? format(new Date(ticket.shiftDate), "d MMM", {
-                        locale: fr,
-                      })
-                    : ""}
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  {SHIFTS[ticket.shiftType]?.label ?? ticket.shiftType}
-                </span>
-                {ticket.comment && (
-                  <span className="text-xs text-muted-foreground truncate">
-                    — {ticket.comment}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+                  <div
+                    className={cn(
+                      "relative flex items-center gap-3 rounded-lg border px-3 py-2",
+                      ticket.status !== "PENDING" && "opacity-60"
+                    )}
+                  >
+                    {ticket.status === "PENDING" && (
+                      <div className="absolute top-2 right-2 flex gap-1">
+                        <button onClick={() => startEditTicket(ticket)} className="text-muted-foreground hover:text-foreground"><Pencil className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => handleDeleteTicket(ticket.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>
+                      </div>
+                    )}
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-xs shrink-0",
+                        ticket.status === "PENDING" &&
+                          "border-orange-300 text-orange-600",
+                        ticket.status === "APPROVED" &&
+                          "border-emerald-300 text-emerald-600",
+                        ticket.status === "REJECTED" &&
+                          "border-red-300 text-red-600"
+                      )}
+                    >
+                      {ticket.status === "PENDING"
+                        ? "En attente"
+                        : ticket.status === "APPROVED"
+                        ? "Approuve"
+                        : "Rejete"}
+                    </Badge>
+                    <span className="text-sm">
+                      {ticket.shiftDate
+                        ? format(new Date(ticket.shiftDate), "d MMM", {
+                            locale: fr,
+                          })
+                        : ""}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      {SHIFTS[ticket.shiftType]?.label ?? ticket.shiftType}
+                    </span>
+                    {ticket.comment && (
+                      <span className="text-xs text-muted-foreground truncate">
+                        — {ticket.comment}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Week stats bar */}
