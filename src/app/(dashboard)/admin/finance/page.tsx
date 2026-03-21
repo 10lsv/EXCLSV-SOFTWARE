@@ -171,8 +171,8 @@ const STATUS_STYLE: Record<string, string> = {
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: "Brouillon",
-  SENT: "Envoy\u00e9e",
-  PAID: "Pay\u00e9e",
+  SENT: "Envoyée",
+  PAID: "Payée",
 };
 
 /* ---------- Component ---------- */
@@ -210,10 +210,7 @@ export default function AdminFinancePage() {
   useEffect(() => {
     async function fetchRefs() {
       try {
-        const [modelsRes, planningRes] = await Promise.all([
-          fetch("/api/models?limit=100"),
-          fetch("/api/planning"),
-        ]);
+        const modelsRes = await fetch("/api/models?limit=100");
         const modelsJson = await modelsRes.json();
         if (modelsJson?.data) {
           const list = modelsJson.data.models || modelsJson.data;
@@ -227,9 +224,18 @@ export default function AdminFinancePage() {
               : []
           );
         }
-        const planningJson = await planningRes.json();
-        if (planningJson?.data?.chatters) {
-          setChatters(planningJson.data.chatters);
+
+        // Fetch chatters from /api/chatters (returns ChatterProfiles with user info)
+        const chattersRes = await fetch("/api/chatters");
+        const chattersJson = await chattersRes.json();
+        if (chattersJson?.data) {
+          const list = Array.isArray(chattersJson.data) ? chattersJson.data : [];
+          setChatters(
+            list.map((c: { user: { id: string; name: string }; id: string }) => ({
+              id: c.user.id,
+              name: c.user.name,
+            }))
+          );
         }
       } catch {
         // silent
@@ -263,7 +269,7 @@ export default function AdminFinancePage() {
         );
       }
     } catch {
-      toast({ title: "Erreur", description: "Impossible de charger les donn\u00e9es.", variant: "destructive" });
+      toast({ title: "Erreur", description: "Impossible de charger les données.", variant: "destructive" });
     }
     setLoading(false);
   }, [selectedPeriod, toast]);
@@ -282,7 +288,7 @@ export default function AdminFinancePage() {
   async function handleImportModel() {
     const file = modelFileRef.current?.files?.[0];
     if (!file || !importModelId) {
-      toast({ title: "Erreur", description: "S\u00e9lectionnez un mod\u00e8le et un fichier.", variant: "destructive" });
+      toast({ title: "Erreur", description: "Sélectionnez un modèle et un fichier.", variant: "destructive" });
       return;
     }
     setImportLoading(true);
@@ -293,7 +299,7 @@ export default function AdminFinancePage() {
       const res = await fetch("/api/finance/import/model", { method: "POST", body: fd });
       const json = await res.json();
       if (json?.success || res.ok) {
-        toast({ title: "Succ\u00e8s", description: "Donn\u00e9es mod\u00e8le import\u00e9es avec succ\u00e8s." });
+        toast({ title: "Succès", description: "Données modèle importées avec succès." });
         if (modelFileRef.current) modelFileRef.current.value = "";
         fetchPeriodData();
       } else {
@@ -309,7 +315,7 @@ export default function AdminFinancePage() {
   async function handleImportChatter() {
     const file = chatterFileRef.current?.files?.[0];
     if (!file || !importChatterId || !importChatterModelId) {
-      toast({ title: "Erreur", description: "S\u00e9lectionnez un chatter, un mod\u00e8le et un fichier.", variant: "destructive" });
+      toast({ title: "Erreur", description: "Sélectionnez un chatter, un modèle et un fichier.", variant: "destructive" });
       return;
     }
     setImportLoading(true);
@@ -321,7 +327,7 @@ export default function AdminFinancePage() {
       const res = await fetch("/api/finance/import/chatter", { method: "POST", body: fd });
       const json = await res.json();
       if (json?.success || res.ok) {
-        toast({ title: "Succ\u00e8s", description: "Donn\u00e9es chatter import\u00e9es avec succ\u00e8s." });
+        toast({ title: "Succès", description: "Données chatter importées avec succès." });
         if (chatterFileRef.current) chatterFileRef.current.value = "";
         fetchPeriodData();
       } else {
@@ -347,13 +353,13 @@ export default function AdminFinancePage() {
       });
       const json = await res.json();
       if (json?.success || res.ok) {
-        toast({ title: "Succ\u00e8s", description: "Factures g\u00e9n\u00e9r\u00e9es avec succ\u00e8s." });
+        toast({ title: "Succès", description: "Factures générées avec succès." });
         fetchPeriodData();
       } else {
-        toast({ title: "Erreur", description: json?.error || "Erreur lors de la g\u00e9n\u00e9ration.", variant: "destructive" });
+        toast({ title: "Erreur", description: json?.error || "Erreur lors de la génération.", variant: "destructive" });
       }
     } catch {
-      toast({ title: "Erreur", description: "Erreur lors de la g\u00e9n\u00e9ration.", variant: "destructive" });
+      toast({ title: "Erreur", description: "Erreur lors de la génération.", variant: "destructive" });
     }
     setGenInvoicesLoading(false);
   }
@@ -372,7 +378,7 @@ export default function AdminFinancePage() {
       });
       const json = await res.json();
       if (json?.success || res.ok) {
-        toast({ title: "Succ\u00e8s", description: "Payroll calcul\u00e9 avec succ\u00e8s." });
+        toast({ title: "Succès", description: "Payroll calculé avec succès." });
         fetchPeriodData();
       } else {
         toast({ title: "Erreur", description: json?.error || "Erreur lors du calcul.", variant: "destructive" });
@@ -398,12 +404,12 @@ export default function AdminFinancePage() {
             inv.id === invoiceId ? { ...inv, status: newStatus as Invoice["status"] } : inv
           )
         );
-        toast({ title: "Statut mis \u00e0 jour" });
+        toast({ title: "Statut mis à jour" });
       } else {
-        toast({ title: "Erreur", description: json?.error || "Impossible de mettre \u00e0 jour.", variant: "destructive" });
+        toast({ title: "Erreur", description: json?.error || "Impossible de mettre à jour.", variant: "destructive" });
       }
     } catch {
-      toast({ title: "Erreur", description: "Impossible de mettre \u00e0 jour.", variant: "destructive" });
+      toast({ title: "Erreur", description: "Impossible de mettre à jour.", variant: "destructive" });
     }
   }
 
@@ -422,12 +428,12 @@ export default function AdminFinancePage() {
             p.id === payrollId ? { ...p, status: newStatus as Payroll["status"] } : p
           )
         );
-        toast({ title: "Statut mis \u00e0 jour" });
+        toast({ title: "Statut mis à jour" });
       } else {
-        toast({ title: "Erreur", description: json?.error || "Impossible de mettre \u00e0 jour.", variant: "destructive" });
+        toast({ title: "Erreur", description: json?.error || "Impossible de mettre à jour.", variant: "destructive" });
       }
     } catch {
-      toast({ title: "Erreur", description: "Impossible de mettre \u00e0 jour.", variant: "destructive" });
+      toast({ title: "Erreur", description: "Impossible de mettre à jour.", variant: "destructive" });
     }
   }
 
@@ -440,7 +446,7 @@ export default function AdminFinancePage() {
         <div>
           <h1 className="text-2xl font-bold">Finance</h1>
           <p className="text-sm text-muted-foreground">
-            Factures, payroll et imports de donn\u00e9es
+            Factures, payroll et imports de données
           </p>
         </div>
 
@@ -450,7 +456,7 @@ export default function AdminFinancePage() {
           onValueChange={(v) => setSelectedPeriodIdx(Number(v))}
         >
           <SelectTrigger className="w-[260px]">
-            <SelectValue placeholder="S\u00e9lectionner une p\u00e9riode" />
+            <SelectValue placeholder="Sélectionner une période" />
           </SelectTrigger>
           <SelectContent>
             {periods.map((p, i) => (
@@ -494,7 +500,7 @@ export default function AdminFinancePage() {
               <Users className="h-5 w-5 text-blue-600" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Part Mod\u00e8les</p>
+              <p className="text-sm text-muted-foreground">Part Modèles</p>
               <p className="text-2xl font-bold text-blue-600">{fmt(kpiModels)}</p>
             </div>
           </CardContent>
@@ -517,7 +523,7 @@ export default function AdminFinancePage() {
       <div>
         <div className="flex items-center gap-3 mb-5">
           <Upload className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">Importer des donn\u00e9es</h2>
+          <h2 className="text-lg font-semibold">Importer des données</h2>
           <Separator className="flex-1" />
         </div>
 
@@ -527,14 +533,14 @@ export default function AdminFinancePage() {
             <CardContent className="space-y-4 p-5">
               <div className="flex items-center gap-2">
                 <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
-                <h3 className="font-medium">Donn\u00e9es mod\u00e8le</h3>
+                <h3 className="font-medium">Données modèle</h3>
               </div>
 
               <div className="space-y-2">
-                <Label>Mod\u00e8le</Label>
+                <Label>Modèle</Label>
                 <Select value={importModelId} onValueChange={setImportModelId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="S\u00e9lectionner un mod\u00e8le" />
+                    <SelectValue placeholder="Sélectionner un modèle" />
                   </SelectTrigger>
                   <SelectContent>
                     {models.map((m) => (
@@ -576,14 +582,14 @@ export default function AdminFinancePage() {
             <CardContent className="space-y-4 p-5">
               <div className="flex items-center gap-2">
                 <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
-                <h3 className="font-medium">Donn\u00e9es chatter</h3>
+                <h3 className="font-medium">Données chatter</h3>
               </div>
 
               <div className="space-y-2">
                 <Label>Chatter</Label>
                 <Select value={importChatterId} onValueChange={setImportChatterId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="S\u00e9lectionner un chatter" />
+                    <SelectValue placeholder="Sélectionner un chatter" />
                   </SelectTrigger>
                   <SelectContent>
                     {chatters.map((c) => (
@@ -596,10 +602,10 @@ export default function AdminFinancePage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Mod\u00e8le</Label>
+                <Label>Modèle</Label>
                 <Select value={importChatterModelId} onValueChange={setImportChatterModelId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="S\u00e9lectionner un mod\u00e8le" />
+                    <SelectValue placeholder="Sélectionner un modèle" />
                   </SelectTrigger>
                   <SelectContent>
                     {models.map((m) => (
@@ -642,7 +648,7 @@ export default function AdminFinancePage() {
       <div>
         <div className="flex items-center gap-3 mb-5">
           <FileText className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">Factures mod\u00e8les</h2>
+          <h2 className="text-lg font-semibold">Factures modèles</h2>
           <Separator className="flex-1" />
         </div>
 
@@ -653,7 +659,7 @@ export default function AdminFinancePage() {
             ) : (
               <RefreshCw className="mr-2 h-4 w-4" />
             )}
-            G\u00e9n\u00e9rer les factures
+            Générer les factures
           </Button>
         </div>
 
@@ -662,10 +668,10 @@ export default function AdminFinancePage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Mod\u00e8le</TableHead>
+                  <TableHead>Modèle</TableHead>
                   <TableHead className="text-right">CA brut</TableHead>
-                  <TableHead className="text-right">% mod\u00e8le</TableHead>
-                  <TableHead className="text-right">Net mod\u00e8le</TableHead>
+                  <TableHead className="text-right">% modèle</TableHead>
+                  <TableHead className="text-right">Net modèle</TableHead>
                   <TableHead className="text-right">Net agence</TableHead>
                   <TableHead>Statut</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -681,7 +687,7 @@ export default function AdminFinancePage() {
                 ) : invoices.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      Aucune facture pour cette p\u00e9riode
+                      Aucune facture pour cette période
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -728,8 +734,8 @@ export default function AdminFinancePage() {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="DRAFT">Brouillon</SelectItem>
-                              <SelectItem value="SENT">Envoy\u00e9e</SelectItem>
-                              <SelectItem value="PAID">Pay\u00e9e</SelectItem>
+                              <SelectItem value="SENT">Envoyée</SelectItem>
+                              <SelectItem value="PAID">Payée</SelectItem>
                             </SelectContent>
                           </Select>
                         </TableCell>
@@ -793,7 +799,7 @@ export default function AdminFinancePage() {
                 ) : payrolls.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                      Aucun payroll pour cette p\u00e9riode
+                      Aucun payroll pour cette période
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -831,8 +837,8 @@ export default function AdminFinancePage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="DRAFT">Brouillon</SelectItem>
-                            <SelectItem value="SENT">Envoy\u00e9</SelectItem>
-                            <SelectItem value="PAID">Pay\u00e9</SelectItem>
+                            <SelectItem value="SENT">Envoyé</SelectItem>
+                            <SelectItem value="PAID">Payé</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>

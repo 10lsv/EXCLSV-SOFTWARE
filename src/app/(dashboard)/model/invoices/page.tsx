@@ -40,8 +40,8 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  SENT: "Envoy\u00e9e",
-  PAID: "Pay\u00e9e",
+  SENT: "Envoyée",
+  PAID: "Payée",
 };
 
 /* ---------- Component ---------- */
