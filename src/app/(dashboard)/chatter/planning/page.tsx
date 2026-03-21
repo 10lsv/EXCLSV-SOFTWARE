@@ -28,11 +28,13 @@ import {
   Loader2,
   Pencil,
   Trash2,
+  CalendarDays,
 } from "lucide-react";
 import { cn, getMondayUTC } from "@/lib/utils";
 import {
   SHIFTS,
   SHIFT_LABELS,
+  getShiftDuration,
   type ShiftType,
 } from "@/lib/shifts";
 import { format, addDays, isSameDay, subDays, isBefore, startOfDay } from "date-fns";
@@ -347,15 +349,19 @@ export default function ChatterPlanningPage() {
   /* --- Week stats --- */
   const weekStats = useMemo(() => {
     const shiftCount = myShifts.length;
-    const clockedHours = records.reduce((sum, r) => {
-      if (!r.clockIn) return sum;
-      const start = new Date(r.clockIn).getTime();
-      const end = r.clockOut ? new Date(r.clockOut).getTime() : 0;
-      if (!end) return sum;
-      return sum + (end - start) / 3_600_000;
+    const plannedMinutes = myShifts.reduce((sum, s) => sum + getShiftDuration(s.shiftType as ShiftType) * 60, 0);
+    const clockedMinutes = records.reduce((sum, r) => {
+      if (!r.clockIn || !r.clockOut) return sum;
+      return sum + (new Date(r.clockOut).getTime() - new Date(r.clockIn).getTime()) / 60000;
     }, 0);
-    return { shiftCount, clockedHours };
+    return { shiftCount, plannedMinutes, clockedMinutes };
   }, [myShifts, records]);
+
+  function formatHM(totalMinutes: number): string {
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = Math.round(totalMinutes % 60);
+    return mins > 0 ? `${hours}h${mins.toString().padStart(2, "0")}` : `${hours}h`;
+  }
 
   /* ---------- Render ---------- */
 
@@ -455,6 +461,39 @@ export default function ChatterPlanningPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-3 gap-3">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <CalendarDays className="h-4 w-4" />
+              <span className="text-[11px] uppercase tracking-wide font-medium">Shifts cette semaine</span>
+            </div>
+            <p className="text-2xl font-bold">{weekStats.shiftCount}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <Clock className="h-4 w-4" />
+              <span className="text-[11px] uppercase tracking-wide font-medium">Heures planifiées</span>
+            </div>
+            <p className="text-2xl font-bold text-blue-600">{formatHM(weekStats.plannedMinutes)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+              <CheckCircle className="h-4 w-4" />
+              <span className="text-[11px] uppercase tracking-wide font-medium">Heures pointées</span>
+            </div>
+            <p className={cn("text-2xl font-bold", weekStats.clockedMinutes > 0 ? "text-green-600" : "text-muted-foreground")}>
+              {weekStats.clockedMinutes > 0 ? formatHM(weekStats.clockedMinutes) : "0h"}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Week List */}
       <div className="space-y-3">
@@ -755,13 +794,7 @@ export default function ChatterPlanningPage() {
         })()}
       </div>
 
-      {/* Week stats bar */}
-      <div className="text-center">
-        <p className="text-xs text-muted-foreground">
-          Shifts : {weekStats.shiftCount} | Heures pointees :{" "}
-          {weekStats.clockedHours.toFixed(1)}h
-        </p>
-      </div>
+      {/* Stats moved to KPI cards above */}
     </div>
   );
 }
