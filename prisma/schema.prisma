@@ -305,7 +305,7 @@ model ShiftSchedule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([chatterId, shiftDate, modelId])
+  @@unique([shiftDate, shiftType, modelId])
   @@index([shiftDate])
   @@index([chatterId])
   @@index([modelId])

@@ -17,7 +17,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -28,7 +27,6 @@ import {
   Clock,
   Timer,
   BarChart3,
-  Plus,
   Trash2,
   Loader2,
 } from "lucide-react";
@@ -62,6 +60,7 @@ interface PlanningShift {
   shiftDate: string;
   shiftType: ShiftType;
   note?: string;
+  modelId?: string;
   chatter: ChatterInfo;
   model: ModelInfo | null;
 }
@@ -70,11 +69,8 @@ interface ClockRecord {
   id: string;
   chatterId: string;
   shiftDate: string;
-  shiftType: ShiftType;
   clockIn: string;
   clockOut?: string;
-  source?: string;
-  chatter: { id: string; name: string };
 }
 
 interface Ticket {
@@ -100,7 +96,11 @@ interface PlanningData {
 /* ---------- Constants ---------- */
 
 const SHIFT_TYPES: ShiftType[] = ["SHIFT_A", "SHIFT_B", "SHIFT_C"];
-const DAY_COUNT = 7;
+const SHIFT_LETTERS: Record<ShiftType, string> = {
+  SHIFT_A: "A",
+  SHIFT_B: "B",
+  SHIFT_C: "C",
+};
 
 const SHIFT_BADGE_STYLE: Record<ShiftType, string> = {
   SHIFT_A: "bg-blue-100 text-blue-700",
@@ -108,7 +108,7 @@ const SHIFT_BADGE_STYLE: Record<ShiftType, string> = {
   SHIFT_C: "bg-amber-100 text-amber-700",
 };
 
-const SHIFT_BORDER: Record<ShiftType, string> = {
+const SHIFT_BORDER_COLOR: Record<ShiftType, string> = {
   SHIFT_A: "border-l-blue-500",
   SHIFT_B: "border-l-violet-500",
   SHIFT_C: "border-l-amber-500",
@@ -131,20 +131,20 @@ export default function AdminPlanningPage() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [duplicating, setDuplicating] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("shifts");
+  const [viewMode, setViewMode] = useState<ViewMode>("models");
 
-  // Assign dialog state
-  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  // Assign dialog
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignDate, setAssignDate] = useState<Date | null>(null);
   const [assignShiftType, setAssignShiftType] = useState<ShiftType>("SHIFT_A");
-  const [assignDate, setAssignDate] = useState<string>("");
-  const [assignModelId, setAssignModelId] = useState<string | null>(null);
-  const [assignChatterId, setAssignChatterId] = useState("");
-  const [assignCheckedModels, setAssignCheckedModels] = useState<string[]>([]);
+  const [assignModelId, setAssignModelId] = useState<string>("");
+  const [assignModelLocked, setAssignModelLocked] = useState(false);
+  const [assignChatterId, setAssignChatterId] = useState<string>("");
   const [assignNote, setAssignNote] = useState("");
   const [assignLoading, setAssignLoading] = useState(false);
 
-  // Edit dialog state
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  // Edit dialog
+  const [editOpen, setEditOpen] = useState(false);
   const [editShift, setEditShift] = useState<PlanningShift | null>(null);
   const [editLoading, setEditLoading] = useState(false);
 
@@ -156,8 +156,8 @@ export default function AdminPlanningPage() {
     return d;
   }, [weekOffset]);
 
-  const days = useMemo(
-    () => Array.from({ length: DAY_COUNT }, (_, i) => addDays(monday, i)),
+  const weekDays = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => addDays(monday, i)),
     [monday]
   );
 
@@ -197,37 +197,33 @@ export default function AdminPlanningPage() {
   }, []);
 
   useEffect(() => {
-    fetchTickets();
-  }, [fetchTickets]);
-
-  useEffect(() => {
     fetchPlanning();
   }, [fetchPlanning]);
 
-  /* --- KPI calculations --- */
+  useEffect(() => {
+    fetchTickets();
+  }, [fetchTickets]);
+
+  /* --- KPIs --- */
   const kpis = useMemo(() => {
     const shiftCount = data.shifts.length;
     const plannedHours = data.shifts.reduce(
-      (sum, s) => sum + getShiftDuration(s.shiftType),
+      (sum, s) => sum + getShiftDuration(s.shiftType as ShiftType),
       0
     );
     const clockedHours = data.clocks.reduce((sum, c) => {
       if (!c.clockOut) return sum;
-      const start = new Date(c.clockIn).getTime();
-      const end = new Date(c.clockOut).getTime();
-      return sum + (end - start) / 3_600_000;
+      return sum + (new Date(c.clockOut).getTime() - new Date(c.clockIn).getTime()) / 3_600_000;
     }, 0);
 
     let coverage = 0;
     if (viewMode === "shifts") {
       coverage = (shiftCount / 21) * 100;
     } else {
-      // modèles: paires uniques (model x jour) avec au moins 1 shift
       const pairs = new Set<string>();
       data.shifts.forEach((s) => {
         if (s.model) {
-          const dayStr = s.shiftDate.slice(0, 10);
-          pairs.add(`${s.model.id}_${dayStr}`);
+          pairs.add(`${s.model.id}_${s.shiftDate.slice(0, 10)}`);
         }
       });
       const total = data.models.length * 7;
@@ -279,11 +275,21 @@ export default function AdminPlanningPage() {
     );
   }
 
-  /* --- Group shifts by chatter for a cell --- */
+  function getShiftForModelDayType(modelId: string, day: Date, shiftType: ShiftType) {
+    const dayStr = format(day, "yyyy-MM-dd");
+    return data.shifts.find(
+      (s) =>
+        s.shiftDate.startsWith(dayStr) &&
+        s.model?.id === modelId &&
+        s.shiftType === shiftType
+    );
+  }
+
+  /* --- Group shifts by chatter for shifts view --- */
   function groupByChatter(cellShifts: PlanningShift[]) {
     const map = new Map<
       string,
-      { chatter: ChatterInfo; models: (ModelInfo | null)[], shifts: PlanningShift[] }
+      { chatter: ChatterInfo; models: (ModelInfo | null)[]; shifts: PlanningShift[] }
     >();
     for (const s of cellShifts) {
       const existing = map.get(s.chatterId);
@@ -301,38 +307,32 @@ export default function AdminPlanningPage() {
     return Array.from(map.values());
   }
 
-  /* --- Assign dialog handlers --- */
+  /* --- Assign dialog --- */
   function openAssignDialog(
     day: Date,
     shiftType: ShiftType,
     preModelId?: string
   ) {
-    setAssignDate(format(day, "yyyy-MM-dd"));
+    setAssignDate(day);
     setAssignShiftType(shiftType);
-    setAssignModelId(preModelId ?? null);
+    setAssignModelId(preModelId ?? "");
+    setAssignModelLocked(!!preModelId);
     setAssignChatterId("");
-    setAssignCheckedModels(preModelId ? [preModelId] : []);
     setAssignNote("");
-    setAssignDialogOpen(true);
+    setAssignOpen(true);
   }
 
-  // Modèles disponibles pour le chatter sélectionné
-  const assignAvailableModels = useMemo(() => {
-    if (!assignChatterId) return [];
-    const modelIds = data.assignments[assignChatterId] ?? [];
-    return data.models.filter((m) => modelIds.includes(m.id));
-  }, [assignChatterId, data.assignments, data.models]);
-
-  function handleAssignModelToggle(modelId: string) {
-    setAssignCheckedModels((prev) =>
-      prev.includes(modelId)
-        ? prev.filter((id) => id !== modelId)
-        : [...prev, modelId]
-    );
-  }
+  // Chatters filtrés par modèle sélectionné
+  const filteredChatters = useMemo(() => {
+    if (!assignModelId) return [];
+    return data.chatters.filter((c) => {
+      const assigned = data.assignments[c.id] ?? [];
+      return assigned.includes(assignModelId);
+    });
+  }, [assignModelId, data.chatters, data.assignments]);
 
   async function handleAssignSubmit() {
-    if (!assignChatterId) return;
+    if (!assignChatterId || !assignDate || !assignModelId) return;
     setAssignLoading(true);
     try {
       await fetch("/api/planning", {
@@ -340,13 +340,13 @@ export default function AdminPlanningPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chatterId: assignChatterId,
-          shiftDate: assignDate,
+          shiftDate: assignDate.toISOString(),
           shiftType: assignShiftType,
-          modelIds: assignCheckedModels.length > 0 ? assignCheckedModels : null,
+          modelId: assignModelId,
           note: assignNote || undefined,
         }),
       });
-      setAssignDialogOpen(false);
+      setAssignOpen(false);
       await fetchPlanning();
     } catch {
       // erreur silencieuse
@@ -354,10 +354,10 @@ export default function AdminPlanningPage() {
     setAssignLoading(false);
   }
 
-  /* --- Edit/Delete dialog --- */
+  /* --- Edit dialog --- */
   function openEditDialog(shift: PlanningShift) {
     setEditShift(shift);
-    setEditDialogOpen(true);
+    setEditOpen(true);
   }
 
   async function handleDeleteShift() {
@@ -365,7 +365,7 @@ export default function AdminPlanningPage() {
     setEditLoading(true);
     try {
       await fetch(`/api/planning/${editShift.id}`, { method: "DELETE" });
-      setEditDialogOpen(false);
+      setEditOpen(false);
       await fetchPlanning();
     } catch {
       // erreur silencieuse
@@ -373,14 +373,14 @@ export default function AdminPlanningPage() {
     setEditLoading(false);
   }
 
-  /* --- Ticket helpers --- */
+  /* --- Tickets --- */
   const pendingTickets = tickets.filter((t) => t.status === "PENDING");
   const resolvedTickets = tickets.filter((t) => t.status !== "PENDING");
 
   /* ---------- Render ---------- */
   return (
     <div className="space-y-6">
-      {/* En-tête */}
+      {/* En-tete */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Planning</h1>
@@ -420,13 +420,14 @@ export default function AdminPlanningPage() {
         </Button>
       </div>
 
-      {/* Sélecteur de vue */}
+      {/* Toggle vue */}
       <div className="flex items-center gap-0">
         <Button
           variant={viewMode === "shifts" ? "default" : "outline"}
           className={cn(
             "rounded-r-none",
-            viewMode === "shifts" && "bg-foreground text-background hover:bg-foreground/90"
+            viewMode === "shifts" &&
+              "bg-foreground text-background hover:bg-foreground/90"
           )}
           onClick={() => setViewMode("shifts")}
         >
@@ -436,7 +437,8 @@ export default function AdminPlanningPage() {
           variant={viewMode === "models" ? "default" : "outline"}
           className={cn(
             "rounded-l-none",
-            viewMode === "models" && "bg-foreground text-background hover:bg-foreground/90"
+            viewMode === "models" &&
+              "bg-foreground text-background hover:bg-foreground/90"
           )}
           onClick={() => setViewMode("models")}
         >
@@ -515,15 +517,107 @@ export default function AdminPlanningPage() {
       {/* Grille */}
       {loading ? (
         <div className="flex items-center justify-center py-12 text-muted-foreground">
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
           Chargement...
         </div>
-      ) : viewMode === "shifts" ? (
+      ) : viewMode === "models" ? (
+        /* ========== VUE MODELES ========== */
+        <div className="overflow-x-auto rounded-lg border">
+          {/* En-tete jours */}
+          <div className="grid grid-cols-[120px_repeat(7,1fr)] border-b">
+            <div className="p-2" />
+            {weekDays.map((day) => (
+              <div
+                key={day.toISOString()}
+                className={cn(
+                  "p-2 text-center text-sm font-medium border-l",
+                  isSameDay(day, today) && "bg-yellow-50/50"
+                )}
+              >
+                {format(day, "EEE d", { locale: fr })}
+              </div>
+            ))}
+          </div>
+
+          {/* Ligne par modele */}
+          {data.models.map((model) => (
+            <div
+              key={model.id}
+              className="grid grid-cols-[120px_repeat(7,1fr)] border-b last:border-b-0"
+            >
+              {/* Label modele */}
+              <div className="p-2 flex items-center gap-2 w-[120px]">
+                <Avatar className="h-6 w-6 shrink-0">
+                  {model.photoUrl ? (
+                    <AvatarImage src={model.photoUrl} alt={model.stageName} />
+                  ) : null}
+                  <AvatarFallback className="text-[10px]">
+                    {model.stageName.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="text-sm font-medium truncate">
+                  {model.stageName}
+                </span>
+              </div>
+
+              {/* Cellules par jour */}
+              {weekDays.map((day) => {
+                const isToday = isSameDay(day, today);
+
+                return (
+                  <div
+                    key={day.toISOString()}
+                    className={cn(
+                      "p-1 border-l min-h-[72px] flex flex-col justify-center gap-0.5",
+                      isToday && "bg-yellow-50/50"
+                    )}
+                  >
+                    {SHIFT_TYPES.map((st) => {
+                      const shift = getShiftForModelDayType(model.id, day, st);
+                      const letter = SHIFT_LETTERS[st];
+
+                      return (
+                        <div
+                          key={st}
+                          className="flex items-center gap-1"
+                        >
+                          <span className="text-[10px] text-muted-foreground w-4 shrink-0">
+                            {letter}:
+                          </span>
+                          {shift ? (
+                            <button
+                              onClick={() => openEditDialog(shift)}
+                              className={cn(
+                                "border-l-2 bg-gray-50 rounded px-1.5 py-0.5 text-[11px] font-medium hover:bg-gray-100 transition-colors cursor-pointer truncate",
+                                SHIFT_BORDER_COLOR[st]
+                              )}
+                            >
+                              {shift.chatter.name}
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => openAssignDialog(day, st, model.id)}
+                              className="text-gray-300 hover:text-gray-500 cursor-pointer text-[11px] transition-colors"
+                            >
+                              +
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      ) : (
         /* ========== VUE SHIFTS ========== */
         <div className="overflow-x-auto rounded-lg border">
-          {/* En-tête jours */}
+          {/* En-tete jours */}
           <div className="grid grid-cols-[100px_repeat(7,1fr)] border-b">
             <div className="p-2" />
-            {days.map((day) => (
+            {weekDays.map((day) => (
               <div
                 key={day.toISOString()}
                 className={cn(
@@ -542,7 +636,7 @@ export default function AdminPlanningPage() {
               key={shiftType}
               className="grid grid-cols-[100px_repeat(7,1fr)] border-b last:border-b-0"
             >
-              {/* Label de ligne */}
+              {/* Label */}
               <div className="p-2 flex items-center">
                 <Badge className={cn("text-xs", SHIFT_BADGE_STYLE[shiftType])}>
                   {SHIFTS[shiftType].label}
@@ -550,7 +644,7 @@ export default function AdminPlanningPage() {
               </div>
 
               {/* Cellules par jour */}
-              {days.map((day) => {
+              {weekDays.map((day) => {
                 const cellShifts = getShiftsForCell(day, shiftType);
                 const isToday = isSameDay(day, today);
                 const grouped = groupByChatter(cellShifts);
@@ -559,124 +653,34 @@ export default function AdminPlanningPage() {
                   <div
                     key={day.toISOString()}
                     className={cn(
-                      "p-1.5 border-l min-h-[56px] flex flex-wrap items-start gap-1",
+                      "p-1.5 border-l min-h-[56px] flex flex-col items-start gap-1",
                       isToday && "bg-yellow-50/50"
                     )}
                   >
-                    {grouped.length > 0 ? (
-                      grouped.map((g) => (
-                        <button
-                          key={g.chatter.id}
-                          onClick={() => openEditDialog(g.shifts[0])}
-                          className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium hover:bg-gray-200 transition-colors cursor-pointer text-left"
-                        >
-                          <span>{g.chatter.name}</span>
-                          {g.models.some((m) => m !== null) && (
-                            <span className="text-[10px] text-muted-foreground ml-1">
-                              {"→ "}
-                              {g.models
-                                .filter((m): m is ModelInfo => m !== null)
-                                .map((m) => m.stageName)
-                                .join(", ")}
-                            </span>
-                          )}
-                        </button>
-                      ))
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground mx-auto"
-                        onClick={() => openAssignDialog(day, shiftType)}
+                    {grouped.map((g) => (
+                      <button
+                        key={g.chatter.id}
+                        onClick={() => openEditDialog(g.shifts[0])}
+                        className="text-xs hover:bg-gray-100 rounded px-1 py-0.5 transition-colors cursor-pointer text-left truncate max-w-full"
                       >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      ) : (
-        /* ========== VUE MODÈLES ========== */
-        <div className="overflow-x-auto rounded-lg border">
-          {/* En-tête jours */}
-          <div className="grid grid-cols-[160px_repeat(7,1fr)] border-b">
-            <div className="p-2" />
-            {days.map((day) => (
-              <div
-                key={day.toISOString()}
-                className={cn(
-                  "p-2 text-center text-sm font-medium border-l",
-                  isSameDay(day, today) && "bg-yellow-50/50"
-                )}
-              >
-                {format(day, "EEE d", { locale: fr })}
-              </div>
-            ))}
-          </div>
-
-          {/* Ligne par modèle */}
-          {data.models.map((model) => (
-            <div
-              key={model.id}
-              className="grid grid-cols-[160px_repeat(7,1fr)] border-b last:border-b-0"
-            >
-              {/* Label modèle */}
-              <div className="p-2 flex items-center gap-2">
-                <Avatar className="h-7 w-7">
-                  {model.photoUrl ? (
-                    <AvatarImage src={model.photoUrl} alt={model.stageName} />
-                  ) : null}
-                  <AvatarFallback className="text-xs">
-                    {model.stageName.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="text-sm font-medium truncate">
-                  {model.stageName}
-                </span>
-              </div>
-
-              {/* Cellules par jour */}
-              {days.map((day) => {
-                const cellShifts = getShiftsForModelDay(model.id, day);
-                const isToday = isSameDay(day, today);
-
-                return (
-                  <div
-                    key={day.toISOString()}
-                    className={cn(
-                      "p-1.5 border-l min-h-[56px] flex flex-wrap items-start gap-1",
-                      isToday && "bg-yellow-50/50",
-                      cellShifts.length === 0 && "bg-gray-50"
-                    )}
-                  >
-                    {cellShifts.length > 0 ? (
-                      cellShifts.map((s) => (
-                        <button
-                          key={s.id}
-                          onClick={() => openEditDialog(s)}
-                          className={cn(
-                            "border-l-2 rounded-r px-1.5 py-0.5 text-xs font-medium hover:bg-gray-100 transition-colors cursor-pointer bg-white",
-                            SHIFT_BORDER[s.shiftType]
-                          )}
-                        >
-                          {s.chatter.name} ({SHIFTS[s.shiftType].label.replace("Shift ", "")})
-                        </button>
-                      ))
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground mx-auto"
-                        onClick={() =>
-                          openAssignDialog(day, "SHIFT_A", model.id)
-                        }
-                      >
-                        <Plus className="h-4 w-4" />
-                      </Button>
-                    )}
+                        <span className="font-medium">{g.chatter.name}</span>
+                        {g.models.some((m) => m !== null) && (
+                          <span className="text-muted-foreground">
+                            {" → "}
+                            {g.models
+                              .filter((m): m is ModelInfo => m !== null)
+                              .map((m) => m.stageName)
+                              .join(", ")}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => openAssignDialog(day, shiftType)}
+                      className="text-xs text-gray-300 hover:text-gray-500 cursor-pointer transition-colors px-1"
+                    >
+                      + Ajouter
+                    </button>
                   </div>
                 );
               })}
@@ -686,23 +690,27 @@ export default function AdminPlanningPage() {
       )}
 
       {/* ========== DIALOG ASSIGNER ========== */}
-      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+      <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Assigner un shift</DialogTitle>
+            <DialogTitle>
+              Assigner —{" "}
+              {assignDate
+                ? format(assignDate, "EEEE d MMMM", { locale: fr })
+                : ""}
+            </DialogTitle>
           </DialogHeader>
 
-          {assignDate && (
-            <p className="text-sm text-muted-foreground">
-              {format(new Date(assignDate + "T00:00:00"), "EEEE d MMMM yyyy", {
-                locale: fr,
-              })}{" "}
-              — {SHIFTS[assignShiftType].label} ({SHIFT_LABELS[assignShiftType]})
-            </p>
-          )}
+          <div className="mb-2">
+            <Badge
+              className={cn("text-xs px-3 py-1", SHIFT_BADGE_STYLE[assignShiftType])}
+            >
+              {SHIFTS[assignShiftType].label} ({SHIFT_LABELS[assignShiftType]})
+            </Badge>
+          </div>
 
-          <div className="space-y-4 mt-2">
-            {/* Sélection shift type */}
+          <div className="space-y-4">
+            {/* Type de shift */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Type de shift</label>
               <Select
@@ -722,59 +730,58 @@ export default function AdminPlanningPage() {
               </Select>
             </div>
 
-            {/* Sélection chatter */}
+            {/* Modele */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Chatter</label>
+              <label className="text-sm font-medium">Modèle</label>
               <Select
-                value={assignChatterId}
+                value={assignModelId}
                 onValueChange={(v) => {
-                  setAssignChatterId(v);
-                  // Réinitialiser les modèles cochés sauf si pré-rempli
-                  if (assignModelId) {
-                    setAssignCheckedModels([assignModelId]);
-                  } else {
-                    setAssignCheckedModels([]);
-                  }
+                  setAssignModelId(v);
+                  setAssignChatterId("");
                 }}
+                disabled={assignModelLocked}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Choisir un chatter" />
+                  <SelectValue placeholder="Choisir un modèle" />
                 </SelectTrigger>
                 <SelectContent>
-                  {data.chatters.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
+                  {data.models.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.stageName}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Sélection modèles (checkboxes) */}
-            {assignChatterId && assignAvailableModels.length > 0 && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Modèles</label>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {assignAvailableModels.map((model) => (
-                    <div key={model.id} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`model-${model.id}`}
-                        checked={assignCheckedModels.includes(model.id)}
-                        onCheckedChange={() =>
-                          handleAssignModelToggle(model.id)
-                        }
-                      />
-                      <label
-                        htmlFor={`model-${model.id}`}
-                        className="text-sm cursor-pointer"
-                      >
-                        {model.stageName}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Chatter */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Chatter</label>
+              {assignModelId && filteredChatters.length === 0 ? (
+                <p className="text-sm text-muted-foreground italic">
+                  Aucun chatter assigné à{" "}
+                  {data.models.find((m) => m.id === assignModelId)?.stageName ??
+                    "ce modèle"}
+                </p>
+              ) : (
+                <Select
+                  value={assignChatterId}
+                  onValueChange={setAssignChatterId}
+                  disabled={!assignModelId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choisir un chatter" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredChatters.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
 
             {/* Note */}
             <div className="space-y-2">
@@ -789,7 +796,7 @@ export default function AdminPlanningPage() {
             {/* Soumettre */}
             <Button
               onClick={handleAssignSubmit}
-              disabled={!assignChatterId || assignLoading}
+              disabled={!assignChatterId || !assignModelId || assignLoading}
               className="w-full"
             >
               {assignLoading && (
@@ -801,8 +808,8 @@ export default function AdminPlanningPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ========== DIALOG ÉDITER / SUPPRIMER ========== */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+      {/* ========== DIALOG EDITER / SUPPRIMER ========== */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Détail du shift</DialogTitle>
@@ -885,7 +892,18 @@ export default function AdminPlanningPage() {
           {pendingTickets.map((ticket) => (
             <Card key={ticket.id} className="border-l-4 border-l-orange-400">
               <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <Avatar className="h-8 w-8 shrink-0">
+                    {ticket.chatter?.avatar ? (
+                      <AvatarImage
+                        src={ticket.chatter.avatar}
+                        alt={ticket.chatter.name}
+                      />
+                    ) : null}
+                    <AvatarFallback className="text-xs">
+                      {(ticket.chatter?.name ?? "C").charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
                   <div>
                     <p className="text-sm font-medium">
                       {ticket.chatter?.name ?? "Chatter"}
@@ -908,7 +926,7 @@ export default function AdminPlanningPage() {
           ))}
         </div>
 
-        {/* Tickets résolus */}
+        {/* Tickets resolus */}
         {resolvedTickets.length > 0 && (
           <div className="space-y-1">
             {resolvedTickets.map((ticket) => (

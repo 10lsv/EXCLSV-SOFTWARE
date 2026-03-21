@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { chatterId, shiftDate, shiftType, modelIds, note } = body;
+    const { chatterId, shiftDate, shiftType, modelId, modelIds, note } = body;
 
     if (!chatterId || !shiftDate || !shiftType) {
       return jsonError("chatterId, shiftDate et shiftType requis");
@@ -101,10 +101,15 @@ export async function POST(req: NextRequest) {
     const dateObj = new Date(shiftDate);
     const normalizedDate = new Date(Date.UTC(dateObj.getUTCFullYear(), dateObj.getUTCMonth(), dateObj.getUTCDate()));
 
-    // If modelIds provided, create one shift per model
-    const mIds: (string | null)[] = Array.isArray(modelIds) && modelIds.length > 0
-      ? modelIds
-      : [null];
+    // Support both modelId (single) and modelIds (array)
+    let mIds: (string | null)[];
+    if (modelId) {
+      mIds = [modelId];
+    } else if (Array.isArray(modelIds) && modelIds.length > 0) {
+      mIds = modelIds;
+    } else {
+      mIds = [null];
+    }
 
     const created = [];
     for (const modelId of mIds) {
