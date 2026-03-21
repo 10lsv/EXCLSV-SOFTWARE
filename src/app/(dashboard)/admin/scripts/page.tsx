@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,9 +22,12 @@ import {
   Clock,
   Loader2,
   Copy,
+  TrendingUp,
+  DollarSign,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 import { fr } from "date-fns/locale";
 
 interface ModelOption {
@@ -40,11 +43,7 @@ interface ScriptListItem {
   description?: string;
   status: "DRAFT" | "VALIDATED";
   tags: string[];
-  model: {
-    id: string;
-    stageName: string;
-    photoUrl?: string | null;
-  };
+  model: { id: string; stageName: string; photoUrl?: string | null };
   stepsCount: number;
   totalMedias: number;
   completedMedias: number;
@@ -73,14 +72,20 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const CATEGORIES = Object.keys(CATEGORY_LABELS);
 
+function getCardBorder(s: ScriptListItem): string {
+  if (s.status === "DRAFT") return "border-l-4 border-l-gray-300 bg-gray-50/50 dark:bg-gray-900/20";
+  if (s.totalMedias > 0 && s.completedMedias === s.totalMedias) return "border-l-4 border-l-green-500 bg-green-50/30 dark:bg-green-950/10";
+  return "border-l-4 border-l-blue-500";
+}
+
 export default function AdminScriptsPage() {
   const router = useRouter();
   const [scripts, setScripts] = useState<ScriptListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [models, setModels] = useState<ModelOption[]>([]);
-  const [filterModel, setFilterModel] = useState<string>("");
-  const [filterCategory, setFilterCategory] = useState<string>("");
-  const [filterStatus, setFilterStatus] = useState<string>("");
+  const [filterModel, setFilterModel] = useState("");
+  const [filterCategory, setFilterCategory] = useState("");
+  const [filterStatus, setFilterStatus] = useState("");
   const [duplicating, setDuplicating] = useState<string | null>(null);
 
   const fetchScripts = useCallback(async () => {
@@ -90,14 +95,11 @@ export default function AdminScriptsPage() {
       if (filterModel) params.set("modelId", filterModel);
       if (filterCategory) params.set("category", filterCategory);
       if (filterStatus) params.set("status", filterStatus);
-
       const res = await fetch(`/api/scripts?${params}`);
       const json = await res.json();
-      if (json.success) {
-        setScripts(json.data);
-      }
-    } catch (err) {
-      console.error("[Scripts] Erreur chargement:", err);
+      if (json.success) setScripts(json.data);
+    } catch {
+      // ignore
     }
     setLoading(false);
   }, [filterModel, filterCategory, filterStatus]);
@@ -106,52 +108,72 @@ export default function AdminScriptsPage() {
     try {
       const res = await fetch("/api/models?limit=100");
       const json = await res.json();
-      if (json.success) {
-        setModels(
-          json.data.models.map((m: ModelOption) => ({
-            id: m.id,
-            stageName: m.stageName,
-            photoUrl: m.photoUrl,
-          }))
-        );
-      }
-    } catch (err) {
-      console.error("[Scripts] Erreur chargement modèles:", err);
+      if (json.success) setModels(json.data.models.map((m: ModelOption) => ({ id: m.id, stageName: m.stageName, photoUrl: m.photoUrl })));
+    } catch {
+      // ignore
     }
   }, []);
 
-  useEffect(() => {
-    fetchModels();
-  }, [fetchModels]);
+  useEffect(() => { fetchModels(); }, [fetchModels]);
+  useEffect(() => { const t = setTimeout(fetchScripts, 300); return () => clearTimeout(t); }, [fetchScripts]);
 
-  useEffect(() => {
-    const timeout = setTimeout(fetchScripts, 300);
-    return () => clearTimeout(timeout);
-  }, [fetchScripts]);
-
-  async function handleDuplicate(e: React.MouseEvent, scriptId: string) {
+  async function handleDuplicate(e: React.MouseEvent, id: string) {
     e.stopPropagation();
-    setDuplicating(scriptId);
+    setDuplicating(id);
     try {
-      const res = await fetch(`/api/scripts/${scriptId}/duplicate`, {
-        method: "POST",
-      });
+      const res = await fetch(`/api/scripts/${id}/duplicate`, { method: "POST" });
       const json = await res.json();
-      if (json.success) {
-        fetchScripts();
-      }
-    } catch (err) {
-      console.error("[Scripts] Erreur duplication:", err);
+      if (json.success) fetchScripts();
+    } catch {
+      // ignore
     }
     setDuplicating(null);
   }
 
-  const totalScripts = scripts.length;
-  const validated = scripts.filter((s) => s.status === "VALIDATED").length;
-  const drafts = scripts.filter((s) => s.status === "DRAFT").length;
-  const pendingContent = scripts
-    .filter((s) => s.status === "VALIDATED")
-    .reduce((acc, s) => acc + (s.totalMedias - s.completedMedias), 0);
+  // ─── KPI calculations ───
+  const kpis = useMemo(() => {
+    const ready = scripts.filter(
+      (s) => s.status === "VALIDATED" && s.totalMedias > 0 && s.completedMedias === s.totalMedias
+    );
+    const inProd = scripts.filter(
+      (s) => s.status === "VALIDATED" && (s.totalMedias === 0 || s.completedMedias < s.totalMedias)
+    );
+    const drafts = scripts.filter((s) => s.status === "DRAFT");
+    const totalMedias = scripts.reduce((a, s) => a + s.totalMedias, 0);
+    const completedMedias = scripts.reduce((a, s) => a + s.completedMedias, 0);
+    const prodRate = totalMedias > 0 ? Math.round((completedMedias / totalMedias) * 100) : 0;
+    const readyRevenue = ready.reduce((a, s) => a + s.totalPrice, 0);
+
+    return { total: scripts.length, ready: ready.length, inProd: inProd.length, drafts: drafts.length, prodRate, readyRevenue };
+  }, [scripts]);
+
+  // ─── Category distribution ───
+  const catCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    scripts.forEach((s) => { map[s.category] = (map[s.category] || 0) + 1; });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }, [scripts]);
+
+  // ─── Models en retard ───
+  const lateModels = useMemo(() => {
+    const now = new Date();
+    const map = new Map<string, { model: ScriptListItem["model"]; pending: number; days: number }>();
+    scripts
+      .filter((s) => s.status === "VALIDATED" && s.totalMedias > s.completedMedias)
+      .forEach((s) => {
+        const age = differenceInDays(now, new Date(s.createdAt));
+        if (age < 7) return;
+        const pending = s.totalMedias - s.completedMedias;
+        const existing = map.get(s.model.id);
+        if (existing) {
+          existing.pending += pending;
+          existing.days = Math.max(existing.days, age);
+        } else {
+          map.set(s.model.id, { model: s.model, pending, days: age });
+        }
+      });
+    return Array.from(map.values());
+  }, [scripts]);
 
   return (
     <div className="space-y-6">
@@ -169,100 +191,119 @@ export default function AdminScriptsPage() {
         </Button>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+      {/* KPI Cards — 6 cards, 2 rows */}
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <FileText className="h-4 w-4" />
-              <span className="text-xs font-medium uppercase tracking-wider">
-                Total scripts
-              </span>
+              <span className="text-xs font-medium uppercase tracking-wider">Total scripts</span>
             </div>
-            <p className="text-2xl font-bold">{totalScripts}</p>
+            <p className="text-2xl font-bold">{kpis.total}</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-green-200 bg-green-50/50 dark:bg-green-950/10">
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-muted-foreground mb-1">
+            <div className="flex items-center gap-2 text-green-600 mb-1">
               <CheckCircle2 className="h-4 w-4" />
-              <span className="text-xs font-medium uppercase tracking-wider">
-                Validés
-              </span>
+              <span className="text-xs font-medium uppercase tracking-wider">Prêts à l&apos;emploi</span>
             </div>
-            <p className="text-2xl font-bold text-green-600">{validated}</p>
+            <p className="text-2xl font-bold text-green-600">{kpis.ready}</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/10">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-blue-600 mb-1">
+              <Clock className="h-4 w-4" />
+              <span className="text-xs font-medium uppercase tracking-wider">En production</span>
+            </div>
+            <p className="text-2xl font-bold text-blue-600">{kpis.inProd}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gray-50/50 dark:bg-gray-900/20">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
               <FileEdit className="h-4 w-4" />
-              <span className="text-xs font-medium uppercase tracking-wider">
-                Brouillons
-              </span>
+              <span className="text-xs font-medium uppercase tracking-wider">Brouillons</span>
             </div>
-            <p className="text-2xl font-bold text-gray-500">{drafts}</p>
+            <p className="text-2xl font-bold text-gray-500">{kpis.drafts}</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={cn(
+          kpis.prodRate >= 80 ? "border-green-200 bg-green-50/50" :
+          kpis.prodRate >= 50 ? "border-orange-200 bg-orange-50/50" :
+          "border-red-200 bg-red-50/50"
+        )}>
           <CardContent className="p-4">
             <div className="flex items-center gap-2 text-muted-foreground mb-1">
-              <Clock className="h-4 w-4" />
-              <span className="text-xs font-medium uppercase tracking-wider">
-                Contenus en attente
-              </span>
+              <TrendingUp className="h-4 w-4" />
+              <span className="text-xs font-medium uppercase tracking-wider">Taux production</span>
             </div>
-            <p className="text-2xl font-bold text-orange-500">{pendingContent}</p>
+            <p className={cn(
+              "text-2xl font-bold",
+              kpis.prodRate >= 80 ? "text-green-600" : kpis.prodRate >= 50 ? "text-orange-600" : "text-red-600"
+            )}>
+              {kpis.prodRate}%
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-black dark:bg-white">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 text-white/70 dark:text-black/70 mb-1">
+              <DollarSign className="h-4 w-4" />
+              <span className="text-xs font-medium uppercase tracking-wider">Revenus potentiels</span>
+            </div>
+            <p className="text-2xl font-bold text-white dark:text-black">
+              {kpis.readyRevenue > 0 ? `$${kpis.readyRevenue.toLocaleString()}` : "$0"}
+            </p>
           </CardContent>
         </Card>
       </div>
 
+      {/* Category badges */}
+      {catCounts.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setFilterCategory("")}
+            className={cn(
+              "rounded-full px-3 py-1 text-xs font-medium border transition-colors",
+              !filterCategory ? "bg-foreground text-background" : "hover:bg-muted"
+            )}
+          >
+            Tous
+          </button>
+          {catCounts.map(([cat, count]) => (
+            <button
+              key={cat}
+              onClick={() => setFilterCategory(filterCategory === cat ? "" : cat)}
+              className={cn(
+                "rounded-full px-3 py-1 text-xs font-medium border transition-colors",
+                filterCategory === cat ? "ring-2 ring-offset-1 ring-primary" : "",
+                CATEGORY_COLORS[cat]
+              )}
+            >
+              {CATEGORY_LABELS[cat] || cat} ×{count}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-3">
-        <Select
-          value={filterModel || "all"}
-          onValueChange={(v) => setFilterModel(v === "all" ? "" : v)}
-        >
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Tous les modèles" />
-          </SelectTrigger>
+        <Select value={filterModel || "all"} onValueChange={(v) => setFilterModel(v === "all" ? "" : v)}>
+          <SelectTrigger className="w-[200px]"><SelectValue placeholder="Tous les modèles" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tous les modèles</SelectItem>
-            {models.map((m) => (
-              <SelectItem key={m.id} value={m.id}>
-                {m.stageName}
-              </SelectItem>
-            ))}
+            {models.map((m) => (<SelectItem key={m.id} value={m.id}>{m.stageName}</SelectItem>))}
           </SelectContent>
         </Select>
-
-        <Select
-          value={filterCategory || "all"}
-          onValueChange={(v) => setFilterCategory(v === "all" ? "" : v)}
-        >
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Toutes les catégories" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Toutes les catégories</SelectItem>
-            {CATEGORIES.map((cat) => (
-              <SelectItem key={cat} value={cat}>
-                {CATEGORY_LABELS[cat]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={filterStatus || "all"}
-          onValueChange={(v) => setFilterStatus(v === "all" ? "" : v)}
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Tous les statuts" />
-          </SelectTrigger>
+        <Select value={filterStatus || "all"} onValueChange={(v) => setFilterStatus(v === "all" ? "" : v)}>
+          <SelectTrigger className="w-[180px]"><SelectValue placeholder="Tous les statuts" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tous les statuts</SelectItem>
             <SelectItem value="DRAFT">Brouillon</SelectItem>
@@ -270,6 +311,32 @@ export default function AdminScriptsPage() {
           </SelectContent>
         </Select>
       </div>
+
+      {/* Late models alert */}
+      {lateModels.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 dark:bg-amber-950/10 dark:border-amber-800">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">Modèles à relancer</span>
+          </div>
+          <div className="space-y-1.5">
+            {lateModels.map((lm) => (
+              <button
+                key={lm.model.id}
+                onClick={() => setFilterModel(lm.model.id)}
+                className="flex items-center gap-2 text-sm hover:underline w-full text-left"
+              >
+                <Avatar className="h-5 w-5">
+                  <AvatarImage src={lm.model.photoUrl || undefined} />
+                  <AvatarFallback className="text-[8px]">{lm.model.stageName.slice(0, 2).toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <span className="font-medium">{lm.model.stageName}</span>
+                <span className="text-muted-foreground">— {lm.pending} média{lm.pending > 1 ? "s" : ""} en attente depuis {lm.days}j</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Script list */}
       {loading ? (
@@ -281,9 +348,7 @@ export default function AdminScriptsPage() {
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16">
           <FileText className="mb-4 h-12 w-12 text-muted-foreground/50" />
           <h3 className="text-lg font-medium">Aucun script</h3>
-          <p className="mb-4 text-sm text-muted-foreground">
-            Créez votre premier script de vente
-          </p>
+          <p className="mb-4 text-sm text-muted-foreground">Créez votre premier script de vente</p>
           <Button onClick={() => router.push("/admin/scripts/new")}>
             <Plus className="mr-2 h-4 w-4" />
             Nouveau script
@@ -292,20 +357,12 @@ export default function AdminScriptsPage() {
       ) : (
         <div className="grid gap-3">
           {scripts.map((script) => {
-            const mediaPercent =
-              script.totalMedias > 0
-                ? Math.round((script.completedMedias / script.totalMedias) * 100)
-                : 0;
+            const mediaPercent = script.totalMedias > 0 ? Math.round((script.completedMedias / script.totalMedias) * 100) : 0;
 
             return (
               <Card
                 key={script.id}
-                className={cn(
-                  "cursor-pointer transition-colors hover:bg-muted/50",
-                  script.status === "DRAFT"
-                    ? "border-l-4 border-l-gray-400"
-                    : "border-l-4 border-l-green-500"
-                )}
+                className={cn("cursor-pointer transition-colors hover:bg-muted/50", getCardBorder(script))}
                 onClick={() => router.push(`/admin/scripts/${script.id}`)}
               >
                 <CardContent className="p-4">
@@ -313,24 +370,12 @@ export default function AdminScriptsPage() {
                     <div className="flex-1 space-y-2">
                       <div className="flex items-center gap-3 flex-wrap">
                         <h3 className="font-bold text-base">{script.name}</h3>
-                        <Badge
-                          variant="secondary"
-                          className={cn(
-                            "text-xs",
-                            CATEGORY_COLORS[script.category]
-                          )}
-                        >
+                        <Badge variant="secondary" className={cn("text-xs", CATEGORY_COLORS[script.category])}>
                           {CATEGORY_LABELS[script.category] || script.category}
                         </Badge>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-xs",
-                            script.status === "VALIDATED"
-                              ? "border-green-500 text-green-600"
-                              : "border-gray-400 text-gray-500"
-                          )}
-                        >
+                        <Badge variant="outline" className={cn("text-xs",
+                          script.status === "VALIDATED" ? "border-green-500 text-green-600" : "border-gray-400 text-gray-500"
+                        )}>
                           {script.status === "VALIDATED" ? "Validé" : "Brouillon"}
                         </Badge>
                       </div>
@@ -339,22 +384,12 @@ export default function AdminScriptsPage() {
                         <div className="flex items-center gap-2">
                           <Avatar className="h-5 w-5">
                             <AvatarImage src={script.model.photoUrl || undefined} />
-                            <AvatarFallback className="text-[10px]">
-                              {script.model.stageName.slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
+                            <AvatarFallback className="text-[10px]">{script.model.stageName.slice(0, 2).toUpperCase()}</AvatarFallback>
                           </Avatar>
                           <span>{script.model.stageName}</span>
                         </div>
-
-                        {script.totalPrice > 0 && (
-                          <span className="font-medium">{script.totalPrice}$</span>
-                        )}
-
-                        <span>
-                          {format(new Date(script.createdAt), "d MMM yyyy", {
-                            locale: fr,
-                          })}
-                        </span>
+                        {script.totalPrice > 0 && <span className="font-medium">{script.totalPrice}$</span>}
+                        <span>{format(new Date(script.createdAt), "d MMM yyyy", { locale: fr })}</span>
                       </div>
 
                       {script.totalMedias > 0 && (
@@ -374,11 +409,7 @@ export default function AdminScriptsPage() {
                       disabled={duplicating === script.id}
                       onClick={(e) => handleDuplicate(e, script.id)}
                     >
-                      {duplicating === script.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
+                      {duplicating === script.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" />}
                     </Button>
                   </div>
                 </CardContent>
