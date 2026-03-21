@@ -142,7 +142,7 @@ export function SidebarNav({ role }: { role: Role }) {
             {item.badge && count > 0 && (
               <span className={cn(
                 "ml-auto flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold text-white",
-                item.badge === "messages" ? "bg-primary" : "bg-red-500"
+                "bg-red-500"
               )}>
                 {count > 99 ? "99+" : count}
               </span>
