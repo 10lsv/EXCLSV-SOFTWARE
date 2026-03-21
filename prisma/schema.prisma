@@ -52,6 +52,8 @@ model User {
   shifts            ShiftSchedule[]  @relation("ChatterShifts")
   clockRecords      ClockRecord[]    @relation("ChatterClocks")
   clockTickets      ClockTicket[]    @relation("ChatterTickets")
+  chatterDailyData  ChatterDailyData[] @relation("ChatterDailyData")
+  chatterPayrolls   ChatterPayroll[]   @relation("ChatterPayrolls")
 }
 
 model ModelProfile {
@@ -116,6 +118,7 @@ model ModelProfile {
   invoices           ModelInvoice[]
   onboarding         OnboardingPipeline?
   inflowwData        InflowwDailyData[]
+  chatterData        ChatterDailyData[] @relation("ChatterModelData")
   shifts             ShiftSchedule[]
 
   createdAt DateTime @default(now())
@@ -388,6 +391,49 @@ model InflowwDailyData {
   @@unique([modelId, date])
 }
 
+model ChatterDailyData {
+  id              String       @id @default(cuid())
+  chatterId       String
+  chatter         User         @relation("ChatterDailyData", fields: [chatterId], references: [id], onDelete: Cascade)
+  modelId         String
+  model           ModelProfile @relation("ChatterModelData", fields: [modelId], references: [id])
+  date            DateTime
+  salesGross      Float        @default(0)
+  ppvSalesGross   Float        @default(0)
+  tipsGross       Float        @default(0)
+  messagesGross   Float        @default(0)
+  totalGross      Float        @default(0)
+  scheduledHours  Float        @default(0)
+  clockedHours    Float        @default(0)
+  createdAt       DateTime     @default(now())
+
+  @@unique([chatterId, modelId, date])
+  @@index([chatterId])
+  @@index([modelId])
+}
+
+model ChatterPayroll {
+  id                    String   @id @default(cuid())
+  chatterId             String
+  chatter               User     @relation("ChatterPayrolls", fields: [chatterId], references: [id], onDelete: Cascade)
+  periodStart           DateTime
+  periodEnd             DateTime
+  totalHours            Float
+  hourlyRate            Float
+  baseSalary            Float
+  tipsMessagesGenerated Float    @default(0)
+  commissionPercent     Float    @default(0)
+  commissionAmount      Float    @default(0)
+  totalPay              Float
+  status                String   @default("DRAFT") // DRAFT | VALIDATED | PAID
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([chatterId, periodStart])
+  @@index([chatterId])
+  @@index([status])
+}
+
 model ModelInvoice {
   id      String       @id @default(cuid())
   modelId String
@@ -418,6 +464,10 @@ model ModelInvoice {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([modelId, periodStart])
+  @@index([modelId])
+  @@index([status])
 }
 
 model OnboardingPipeline {

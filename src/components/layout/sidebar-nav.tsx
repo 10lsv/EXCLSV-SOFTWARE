@@ -65,7 +65,7 @@ const navByRole: Record<Role, NavCategory[]> = {
       label: "Opérations",
       items: [
         { label: "Planning", href: "/admin/planning", icon: Clock },
-        { label: "Finance", href: "/admin/finance", icon: DollarSign, soon: true },
+        { label: "Finance", href: "/admin/finance", icon: DollarSign },
         { label: "Réseaux sociaux", href: "/admin/social", icon: Share2, soon: true },
       ],
     },
@@ -104,7 +104,7 @@ const navByRole: Record<Role, NavCategory[]> = {
       label: "Opérations",
       items: [
         { label: "Planning", href: "/admin/planning", icon: Clock },
-        { label: "Finance", href: "/admin/finance", icon: DollarSign, soon: true },
+        { label: "Finance", href: "/admin/finance", icon: DollarSign },
         { label: "Réseaux sociaux", href: "/admin/social", icon: Share2, soon: true },
       ],
     },
@@ -163,7 +163,7 @@ const navByRole: Record<Role, NavCategory[]> = {
       label: "Mon espace",
       items: [
         { label: "Mon Profil", href: "/model/profile", icon: User },
-        { label: "Mes factures", href: "/model/invoices", icon: Receipt, soon: true },
+        { label: "Mes factures", href: "/model/invoices", icon: Receipt },
       ],
     },
   ],
