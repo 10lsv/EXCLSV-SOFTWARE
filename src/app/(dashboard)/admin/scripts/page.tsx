@@ -197,6 +197,12 @@ export default function AdminScriptsPage() {
         </Button>
       </div>
 
+      {/* Divider: Scripts */}
+      <div className="flex items-center gap-3">
+        <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium shrink-0">Scripts</span>
+        <div className="flex-1 h-px bg-gray-200 dark:bg-gray-800" />
+      </div>
+
       {/* Row 1 — Script stats (4 cards) */}
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -235,6 +241,12 @@ export default function AdminScriptsPage() {
             <p className="text-2xl font-bold text-green-600">{kpis.ready}</p>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Divider: Contenus */}
+      <div className="flex items-center gap-3 mt-2">
+        <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium shrink-0">Contenus à produire</span>
+        <div className="flex-1 h-px bg-gray-200 dark:bg-gray-800" />
       </div>
 
       {/* Row 2 — Media status (3 cards) */}
