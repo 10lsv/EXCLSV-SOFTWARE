@@ -58,6 +58,11 @@ export async function GET(_req: NextRequest) {
   });
   const senderMap = new Map(senders.map((s) => [s.id, s.name]));
 
+  // Fix any NULL readBy values (migration edge case)
+  await prisma.$executeRawUnsafe(
+    'UPDATE "CustomMessage" SET "readBy" = ARRAY[]::text[] WHERE "readBy" IS NULL'
+  );
+
   // Count unread per conversation
   const result = await Promise.all(
     customs.map(async (c) => {
@@ -68,6 +73,7 @@ export async function GET(_req: NextRequest) {
           NOT: { readBy: { has: userId } },
         },
       });
+      console.log("[MSG] Conversation", c.id, "unreadCount:", unreadCount);
 
       const lastMsg = c.messages[0] || null;
 

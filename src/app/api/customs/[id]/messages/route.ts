@@ -117,6 +117,7 @@ export async function POST(
     data: {
       customId: params.id,
       senderId: userId,
+      readBy: [userId],
       content: parsed.data.content,
     },
   });

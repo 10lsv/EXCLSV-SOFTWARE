@@ -27,6 +27,11 @@ export async function GET(_req: NextRequest) {
     conditions.push({ modelId: mp.id });
   }
 
+  // Fix any NULL readBy values (migration edge case)
+  await prisma.$executeRawUnsafe(
+    'UPDATE "CustomMessage" SET "readBy" = ARRAY[]::text[] WHERE "readBy" IS NULL'
+  );
+
   const customs = await prisma.customContent.findMany({
     where: { AND: conditions },
     select: { id: true },
