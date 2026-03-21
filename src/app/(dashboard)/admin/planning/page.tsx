@@ -84,6 +84,7 @@ interface Ticket {
   shiftDate: string;
   shiftType: ShiftType;
   comment?: string;
+  screenshotData?: string | null;
   status: "PENDING" | "APPROVED" | "REJECTED";
   createdAt: string;
 }
@@ -133,6 +134,7 @@ export default function AdminPlanningPage() {
     weekStart: "",
   });
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [duplicating, setDuplicating] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("models");
@@ -999,6 +1001,18 @@ export default function AdminPlanningPage() {
                         <p className="mt-1 text-sm">{ticket.comment}</p>
                       )}
 
+                      {/* Screenshot */}
+                      {ticket.screenshotData && ticket.screenshotData !== "[present]" ? (
+                        <img
+                          src={ticket.screenshotData}
+                          alt="Preuve"
+                          className="w-full max-h-48 object-contain rounded-md border border-gray-100 cursor-pointer hover:opacity-80 transition-opacity mt-2 mb-2"
+                          onClick={() => setPreviewImage(ticket.screenshotData!)}
+                        />
+                      ) : (
+                        <p className="text-xs text-muted-foreground mt-1">Aucune preuve jointe</p>
+                      )}
+
                       {/* Action buttons */}
                       {!isResolving && (
                         <div className="flex gap-2 mt-3">
@@ -1149,6 +1163,28 @@ export default function AdminPlanningPage() {
           </div>
         )}
       </div>
+
+      {/* Screenshot preview modal */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div className="relative max-w-2xl w-full" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setPreviewImage(null)}
+              className="absolute -top-10 right-0 text-white hover:text-gray-300 text-sm"
+            >
+              ✕ Fermer
+            </button>
+            <img
+              src={previewImage}
+              alt="Preuve agrandie"
+              className="w-full rounded-lg"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

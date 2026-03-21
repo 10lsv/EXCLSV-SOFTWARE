@@ -19,11 +19,15 @@ export async function GET(_req: NextRequest) {
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     });
 
-    // Don't send screenshot data in list (too large)
-    const data = tickets.map((t) => ({
-      ...t,
-      screenshotData: t.screenshotData ? "[present]" : null,
-    }));
+    // For chatters: strip screenshot data (too large for list)
+    // For admins: keep it so they can review
+    const isAdmin = role === Role.OWNER || role === Role.ADMIN;
+    const data = isAdmin
+      ? tickets
+      : tickets.map((t) => ({
+          ...t,
+          screenshotData: t.screenshotData ? "[present]" : null,
+        }));
 
     return jsonSuccess(data);
   } catch (err: unknown) {
