@@ -64,21 +64,24 @@ interface ChatterInfo {
 interface Invoice {
   id: string;
   modelId: string;
-  model: {
-    id: string;
-    stageName: string;
-    photoUrl?: string;
-  };
+  model: { id: string; stageName: string; photoUrl?: string };
   periodStart: string;
   periodEnd: string;
   grossRevenue: number;
+  ofCutPercent?: number;
   ofFees: number;
+  netAfterOF?: number;
+  modelSharePercent?: number;
   netRevenue: number;
   agencyShare: number;
   amountDue: number;
+  subsRevenue?: number;
+  tipsRevenue?: number;
+  messagesRevenue?: number;
+  postsRevenue?: number;
+  streamsRevenue?: number;
+  referralsRevenue?: number;
   status: "DRAFT" | "SENT" | "PAID";
-  agencyPercentage?: number;
-  modelPercentage?: number;
 }
 
 interface Payroll {
@@ -437,6 +440,52 @@ export default function AdminFinancePage() {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function downloadPDF(inv: any) {
+    const { default: jsPDF } = await import("jspdf");
+    const doc = new jsPDF();
+    const fmtP = (n: number) => `$${(n ?? 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+    const pStart = inv.periodStart ? format(new Date(inv.periodStart), "d MMM yyyy", { locale: fr }) : "";
+    const pEnd = inv.periodEnd ? format(new Date(inv.periodEnd), "d MMM yyyy", { locale: fr }) : "";
+
+    doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.text("EXCLSV", 20, 25);
+    doc.setFontSize(12); doc.setFont("helvetica", "normal"); doc.text("Facture", 20, 33);
+    doc.setFontSize(10);
+    doc.text(`Modele : ${inv.model?.stageName || ""}`, 20, 48);
+    doc.text(`Periode : ${pStart} - ${pEnd}`, 20, 55);
+    doc.text(`Date : ${format(new Date(), "d MMM yyyy", { locale: fr })}`, 20, 62);
+
+    let y = 78;
+    doc.setFont("helvetica", "bold");
+    doc.text("Categorie", 20, y); doc.text("Montant", 160, y, { align: "right" });
+    doc.line(20, y + 2, 190, y + 2); y += 10;
+
+    doc.setFont("helvetica", "normal");
+    const rows: [string, string][] = [
+      ["Subscriptions", fmtP(inv.subsRevenue)], ["Tips", fmtP(inv.tipsRevenue)],
+      ["Messages", fmtP(inv.messagesRevenue)], ["Posts", fmtP(inv.postsRevenue)],
+      ["Streams", fmtP(inv.streamsRevenue)], ["Referrals", fmtP(inv.referralsRevenue)],
+    ];
+    for (const [label, val] of rows) { doc.text(label, 20, y); doc.text(val, 160, y, { align: "right" }); y += 7; }
+
+    doc.line(20, y, 190, y); y += 7;
+    doc.setFont("helvetica", "bold");
+    doc.text("CA Brut", 20, y); doc.text(fmtP(inv.grossRevenue), 160, y, { align: "right" }); y += 12;
+
+    doc.setFont("helvetica", "normal");
+    doc.text(`Commission OnlyFans (${inv.ofCutPercent ?? 20}%)`, 20, y);
+    doc.text(`-${fmtP(inv.ofFees)}`, 160, y, { align: "right" }); y += 7;
+    doc.setFont("helvetica", "bold");
+    doc.text("Net apres OF", 20, y); doc.text(fmtP(inv.netAfterOF ?? inv.netRevenue), 160, y, { align: "right" }); y += 12;
+
+    doc.setFont("helvetica", "normal");
+    const modelPct = inv.modelSharePercent ?? 50;
+    doc.text(`Part modele (${modelPct}%)`, 20, y); doc.text(fmtP(inv.amountDue), 160, y, { align: "right" }); y += 7;
+    doc.text(`Part agence (${100 - modelPct}%)`, 20, y); doc.text(fmtP(inv.agencyShare), 160, y, { align: "right" });
+
+    doc.save(`facture_${inv.model?.stageName || "model"}_${pStart.replace(/ /g, "_")}.pdf`);
+  }
+
   /* ---------- Render ---------- */
 
   return (
@@ -670,30 +719,30 @@ export default function AdminFinancePage() {
                 <TableRow>
                   <TableHead>Modèle</TableHead>
                   <TableHead className="text-right">CA brut</TableHead>
+                  <TableHead className="text-right">Com. OF</TableHead>
+                  <TableHead className="text-right">Net OF</TableHead>
                   <TableHead className="text-right">% modèle</TableHead>
                   <TableHead className="text-right">Net modèle</TableHead>
                   <TableHead className="text-right">Net agence</TableHead>
                   <TableHead>Statut</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="text-right">PDF</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
+                    <TableCell colSpan={9} className="text-center py-8">
                       <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
                     </TableCell>
                   </TableRow>
                 ) : invoices.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       Aucune facture pour cette période
                     </TableCell>
                   </TableRow>
                 ) : (
-                  invoices.map((inv) => {
-                    const modelPct = inv.modelPercentage ?? ((inv.grossRevenue ?? 0) > 0 ? Math.round(((inv.amountDue ?? 0) / (inv.grossRevenue ?? 1)) * 100) : 0);
-                    return (
+                  invoices.map((inv) => (
                       <TableRow key={inv.id}>
                         <TableCell>
                           <div className="flex items-center gap-3">
@@ -709,7 +758,9 @@ export default function AdminFinancePage() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right">{fmt(inv.grossRevenue)}</TableCell>
-                        <TableCell className="text-right">{modelPct}%</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{inv.ofCutPercent ?? 20}%</TableCell>
+                        <TableCell className="text-right">{fmt(inv.netAfterOF)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{inv.modelSharePercent ?? 50}%</TableCell>
                         <TableCell className="text-right font-medium text-blue-600">
                           {fmt(inv.amountDue)}
                         </TableCell>
@@ -721,12 +772,9 @@ export default function AdminFinancePage() {
                             value={inv.status}
                             onValueChange={(v) => handleInvoiceStatusChange(inv.id, v)}
                           >
-                            <SelectTrigger className="w-[130px] h-8 px-2">
+                            <SelectTrigger className="w-[110px] h-8 px-2">
                               <Badge
-                                className={cn(
-                                  "text-xs font-medium cursor-pointer",
-                                  STATUS_STYLE[inv.status]
-                                )}
+                                className={cn("text-xs font-medium cursor-pointer", STATUS_STYLE[inv.status])}
                                 variant="secondary"
                               >
                                 {STATUS_LABEL[inv.status]}
@@ -740,13 +788,12 @@ export default function AdminFinancePage() {
                           </Select>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" disabled>
+                          <Button variant="ghost" size="sm" onClick={() => downloadPDF(inv)}>
                             <Download className="h-4 w-4" />
                           </Button>
                         </TableCell>
                       </TableRow>
-                    );
-                  })
+                    ))
                 )}
               </TableBody>
             </Table>

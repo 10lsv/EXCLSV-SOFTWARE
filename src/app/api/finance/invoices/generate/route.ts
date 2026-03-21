@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     const end = new Date(periodEnd);
 
     const models = await prisma.modelProfile.findMany({
-      select: { id: true, agencyPercentage: true },
+      select: { id: true, agencyPercentage: true, ofCutPercent: true },
     });
 
     const invoices = [];
@@ -35,44 +35,36 @@ export async function POST(req: NextRequest) {
       const referralsRevenue = data.reduce((s, d) => s + d.referralsGross, 0);
       const grossRevenue = data.reduce((s, d) => s + d.totalEarningsGross, 0);
 
-      const ofFees = grossRevenue * 0.20;
-      const netRevenue = grossRevenue - ofFees;
-      const modelSharePct = 100 - model.agencyPercentage;
-      const amountDue = netRevenue * (modelSharePct / 100);
-      const agencyShare = netRevenue - amountDue;
+      // Brut → OF cut → Net → Split model/agency
+      const ofCutPct = model.ofCutPercent ?? 20;
+      const ofFees = Math.round(grossRevenue * (ofCutPct / 100) * 100) / 100;
+      const netAfterOF = Math.round((grossRevenue - ofFees) * 100) / 100;
+      const modelSharePct = 100 - (model.agencyPercentage ?? 50);
+      const amountDue = Math.round(netAfterOF * (modelSharePct / 100) * 100) / 100;
+      const agencyShare = Math.round((netAfterOF - amountDue) * 100) / 100;
+
+      const invoiceData = {
+        periodEnd: end,
+        grossRevenue,
+        ofCutPercent: ofCutPct,
+        ofFees,
+        netAfterOF,
+        modelSharePercent: modelSharePct,
+        netRevenue: netAfterOF,
+        agencyShare,
+        amountDue,
+        subsRevenue,
+        tipsRevenue,
+        messagesRevenue,
+        postsRevenue,
+        streamsRevenue,
+        referralsRevenue,
+      };
 
       const invoice = await prisma.modelInvoice.upsert({
         where: { modelId_periodStart: { modelId: model.id, periodStart: start } },
-        update: {
-          periodEnd: end,
-          grossRevenue,
-          ofFees,
-          netRevenue,
-          agencyShare,
-          amountDue,
-          subsRevenue,
-          tipsRevenue,
-          messagesRevenue,
-          postsRevenue,
-          streamsRevenue,
-          referralsRevenue,
-        },
-        create: {
-          modelId: model.id,
-          periodStart: start,
-          periodEnd: end,
-          grossRevenue,
-          ofFees,
-          netRevenue,
-          agencyShare,
-          amountDue,
-          subsRevenue,
-          tipsRevenue,
-          messagesRevenue,
-          postsRevenue,
-          streamsRevenue,
-          referralsRevenue,
-        },
+        update: invoiceData,
+        create: { modelId: model.id, periodStart: start, ...invoiceData },
       });
 
       invoices.push(invoice);

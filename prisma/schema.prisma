@@ -107,6 +107,7 @@ model ModelProfile {
   contractSignedAt DateTime?
   contractFileUrl  String?
   agencyPercentage Float    @default(50)
+  ofCutPercent     Float    @default(20)
   billingFrequency String   @default("bimonthly")
 
   // Relations
@@ -441,11 +442,14 @@ model ModelInvoice {
 
   periodStart  DateTime
   periodEnd    DateTime
-  grossRevenue Float
-  ofFees       Float
-  netRevenue   Float
-  agencyShare  Float
-  amountDue    Float
+  grossRevenue     Float
+  ofCutPercent     Float    @default(20)
+  ofFees           Float
+  netAfterOF       Float    @default(0)
+  modelSharePercent Float   @default(50)
+  netRevenue       Float
+  agencyShare      Float
+  amountDue        Float
   status       InvoiceStatus @default(DRAFT)
   pdfUrl       String?
 
