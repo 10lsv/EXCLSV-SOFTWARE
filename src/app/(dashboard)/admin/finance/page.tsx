@@ -157,8 +157,8 @@ function getCurrentPeriodIndex(periods: Period[]): number {
   return 0;
 }
 
-function fmt(n: number): string {
-  return `$${n.toLocaleString("fr-FR", { maximumFractionDigits: 0 })}`;
+function fmt(n: number | null | undefined): string {
+  return `$${(n ?? 0).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
 /* ---------- Status helpers ---------- */
@@ -279,10 +279,10 @@ export default function AdminFinancePage() {
   }, [fetchPeriodData]);
 
   /* --- KPIs --- */
-  const kpiGross = invoices.reduce((s, i) => s + i.grossRevenue, 0);
-  const kpiAgency = invoices.reduce((s, i) => s + i.agencyShare, 0);
-  const kpiModels = invoices.reduce((s, i) => s + i.amountDue, 0);
-  const kpiPayroll = payrolls.reduce((s, i) => s + i.totalPay, 0);
+  const kpiGross = invoices.reduce((s, i) => s + (i.grossRevenue ?? 0), 0);
+  const kpiAgency = invoices.reduce((s, i) => s + (i.agencyShare ?? 0), 0);
+  const kpiModels = invoices.reduce((s, i) => s + (i.amountDue ?? 0), 0);
+  const kpiPayroll = payrolls.reduce((s, i) => s + (i.totalPay ?? 0), 0);
 
   /* --- Import model data --- */
   async function handleImportModel() {
@@ -692,7 +692,7 @@ export default function AdminFinancePage() {
                   </TableRow>
                 ) : (
                   invoices.map((inv) => {
-                    const modelPct = inv.modelPercentage ?? (inv.grossRevenue > 0 ? Math.round((inv.amountDue / inv.grossRevenue) * 100) : 0);
+                    const modelPct = inv.modelPercentage ?? ((inv.grossRevenue ?? 0) > 0 ? Math.round(((inv.amountDue ?? 0) / (inv.grossRevenue ?? 1)) * 100) : 0);
                     return (
                       <TableRow key={inv.id}>
                         <TableCell>
