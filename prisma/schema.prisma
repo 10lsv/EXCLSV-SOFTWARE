@@ -54,6 +54,8 @@ model User {
   clockTickets      ClockTicket[]    @relation("ChatterTickets")
   chatterDailyData  ChatterDailyData[] @relation("ChatterDailyData")
   chatterPayrolls   ChatterPayroll[]   @relation("ChatterPayrolls")
+  importLogs        ImportLog[]        @relation("ImportedBy")
+  chatterImportLogs ImportLog[]        @relation("ChatterImport")
 }
 
 model ModelProfile {
@@ -120,6 +122,7 @@ model ModelProfile {
   onboarding         OnboardingPipeline?
   inflowwData        InflowwDailyData[]
   chatterData        ChatterDailyData[] @relation("ChatterModelData")
+  importLogs         ImportLog[]
   shifts             ShiftSchedule[]
 
   createdAt DateTime @default(now())
@@ -536,20 +539,27 @@ model Notification {
 }
 
 model ImportLog {
-  id           String   @id @default(cuid())
-  type         String   // MODEL | CHATTER
-  fileName     String
-  modelId      String?
-  chatterId    String?
-  totalRows    Int      @default(0)
-  imported     Int      @default(0)
-  skipped      Int      @default(0)
-  errors       Json?
-  importedBy   String
-  createdAt    DateTime @default(now())
+  id             String        @id @default(cuid())
+  type           String        // MODEL | CHATTER
+  fileName       String
+  modelId        String?
+  model          ModelProfile?  @relation(fields: [modelId], references: [id])
+  chatterId      String?
+  chatter        User?          @relation("ChatterImport", fields: [chatterId], references: [id])
+  periodStart    DateTime?
+  periodEnd      DateTime?
+  totalRows      Int            @default(0)
+  imported       Int            @default(0)
+  skipped        Int            @default(0)
+  totalAmount    Float?
+  errors         Json?
+  importedBy     String
+  importedByUser User           @relation("ImportedBy", fields: [importedBy], references: [id])
+  createdAt      DateTime       @default(now())
 
   @@index([type])
   @@index([importedBy])
+  @@index([modelId])
 }
 
 model PayrollAdjustment {

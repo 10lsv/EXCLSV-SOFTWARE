@@ -16,6 +16,11 @@ export async function GET(req: NextRequest) {
 
     const logs = await prisma.importLog.findMany({
       where,
+      include: {
+        model: { select: { id: true, stageName: true, photoUrl: true } },
+        chatter: { select: { id: true, name: true } },
+        importedByUser: { select: { id: true, name: true } },
+      },
       orderBy: { createdAt: "desc" },
       take: Math.min(limit, 100),
     });

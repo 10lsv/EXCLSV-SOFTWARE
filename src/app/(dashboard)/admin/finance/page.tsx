@@ -132,11 +132,17 @@ interface ImportLogEntry {
   type: string;
   fileName: string;
   modelId?: string;
+  model?: { id: string; stageName: string; photoUrl?: string };
   chatterId?: string;
+  chatter?: { id: string; name: string };
+  periodStart?: string;
+  periodEnd?: string;
   totalRows: number;
   imported: number;
   skipped: number;
+  totalAmount?: number;
   importedBy: string;
+  importedByUser?: { id: string; name: string };
   createdAt: string;
 }
 
@@ -688,6 +694,76 @@ export default function AdminFinancePage() {
     } catch {
       toast({ title: "Erreur", variant: "destructive" });
     }
+  }
+
+  /* --- Delete import --- */
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  async function handleDeleteImport(logId: string) {
+    setDeleteLoading(true);
+    try {
+      const res = await fetch(`/api/finance/imports/${logId}`, { method: "DELETE" });
+      const json = await res.json();
+      if (json?.success || res.ok) {
+        const d = json?.data || {};
+        let msg = `Import supprimé — ${d.deletedRows || 0} lignes retirées.`;
+        if (d.warnings?.length) msg += ` ${d.warnings.join(" ")}`;
+        toast({ title: "Succès", description: msg });
+        setImportLogs((prev) => prev.filter((l) => l.id !== logId));
+        setDeleteConfirmId(null);
+      } else {
+        toast({ title: "Erreur", description: json?.error || "Impossible de supprimer.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Erreur", description: "Impossible de supprimer.", variant: "destructive" });
+    }
+    setDeleteLoading(false);
+  }
+
+  /* --- Replace import --- */
+  const replaceFileRef = useRef<HTMLInputElement>(null);
+  const [replaceLogId, setReplaceLogId] = useState<string | null>(null);
+  const [replaceLoading, setReplaceLoading] = useState(false);
+
+  async function handleReplaceImport(log: ImportLogEntry) {
+    const file = replaceFileRef.current?.files?.[0];
+    if (!file) return;
+    setReplaceLoading(true);
+    try {
+      // First delete old data
+      await fetch(`/api/finance/imports/${log.id}`, { method: "DELETE" });
+
+      // Then import new data
+      const fd = new FormData();
+      fd.append("file", file);
+      if (log.type === "MODEL" && log.modelId) {
+        fd.append("modelId", log.modelId);
+        const res = await fetch("/api/finance/import/model", { method: "POST", body: fd });
+        const json = await res.json();
+        if (json?.success || res.ok) {
+          toast({ title: "Import remplacé", description: `${json?.data?.imported || 0} lignes mises à jour.` });
+        } else {
+          toast({ title: "Erreur", description: json?.error || "Erreur.", variant: "destructive" });
+        }
+      } else if (log.type === "CHATTER" && log.chatterId && log.modelId) {
+        fd.append("chatterId", log.chatterId);
+        fd.append("modelId", log.modelId);
+        const res = await fetch("/api/finance/import/chatter", { method: "POST", body: fd });
+        const json = await res.json();
+        if (json?.success || res.ok) {
+          toast({ title: "Import remplacé", description: `${json?.data?.imported || 0} lignes mises à jour.` });
+        } else {
+          toast({ title: "Erreur", description: json?.error || "Erreur.", variant: "destructive" });
+        }
+      }
+      if (replaceFileRef.current) replaceFileRef.current.value = "";
+      setReplaceLogId(null);
+      fetchPeriodData();
+    } catch {
+      toast({ title: "Erreur", description: "Erreur lors du remplacement.", variant: "destructive" });
+    }
+    setReplaceLoading(false);
   }
 
   /* --- PDF download --- */
@@ -1279,62 +1355,165 @@ export default function AdminFinancePage() {
               <Separator className="flex-1" />
             </div>
             <Card>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Fichier</TableHead>
-                    <TableHead className="text-right">Lignes</TableHead>
-                    <TableHead className="text-right">Importées</TableHead>
-                    <TableHead className="text-right">Ignorées</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {importLogs.length === 0 ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell
-                        colSpan={6}
-                        className="text-center py-8 text-muted-foreground"
-                      >
-                        Aucun import
-                      </TableCell>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Cible</TableHead>
+                      <TableHead>Fichier</TableHead>
+                      <TableHead>Période</TableHead>
+                      <TableHead className="text-right">Lignes</TableHead>
+                      <TableHead className="text-right">Montant</TableHead>
+                      <TableHead>Par</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ) : (
-                    importLogs.slice(0, 10).map((log) => (
-                      <TableRow key={log.id}>
-                        <TableCell className="text-sm">
-                          {format(new Date(log.createdAt), "d MMM yyyy HH:mm", { locale: fr })}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            className={cn(
-                              "text-xs",
-                              log.type === "MODEL"
-                                ? "bg-blue-100 text-blue-700"
-                                : "bg-violet-100 text-violet-700"
-                            )}
-                            variant="secondary"
-                          >
-                            {log.type === "MODEL" ? "Modèle" : "Chatter"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm truncate max-w-[200px]">
-                          {log.fileName}
-                        </TableCell>
-                        <TableCell className="text-right">{log.totalRows}</TableCell>
-                        <TableCell className="text-right text-green-600 font-medium">
-                          {log.imported}
-                        </TableCell>
-                        <TableCell className="text-right text-muted-foreground">
-                          {log.skipped}
+                  </TableHeader>
+                  <TableBody>
+                    {importLogs.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={9}
+                          className="text-center py-8 text-muted-foreground"
+                        >
+                          Aucun import
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : (
+                      importLogs.slice(0, 10).map((log) => (
+                        <TableRow key={log.id}>
+                          <TableCell className="text-sm whitespace-nowrap">
+                            {format(new Date(log.createdAt), "d MMM yyyy HH:mm", { locale: fr })}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              className={cn(
+                                "text-xs",
+                                log.type === "MODEL"
+                                  ? "bg-blue-50 text-blue-700"
+                                  : "bg-purple-50 text-purple-700"
+                              )}
+                              variant="secondary"
+                            >
+                              {log.type === "MODEL" ? "Modèle" : "Chatter"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {log.type === "MODEL" && log.model ? (
+                              <div className="flex items-center gap-2">
+                                <Avatar className="h-5 w-5">
+                                  {log.model.photoUrl && <AvatarImage src={log.model.photoUrl} />}
+                                  <AvatarFallback className="text-[9px]">
+                                    {log.model.stageName?.slice(0, 2).toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="text-sm">{log.model.stageName}</span>
+                              </div>
+                            ) : log.type === "CHATTER" ? (
+                              <span className="text-sm">
+                                {log.chatter?.name || "—"}
+                                {log.model ? ` → ${log.model.stageName}` : ""}
+                              </span>
+                            ) : (
+                              <span className="text-sm text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell
+                            className="text-sm max-w-[160px] truncate"
+                            title={log.fileName}
+                          >
+                            {log.fileName}
+                          </TableCell>
+                          <TableCell className="text-sm whitespace-nowrap">
+                            {log.periodStart && log.periodEnd
+                              ? `${format(new Date(log.periodStart), "d", { locale: fr })}-${format(new Date(log.periodEnd), "d MMM yyyy", { locale: fr })}`
+                              : "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className="text-green-600 font-medium">{log.imported}</span>
+                            {log.skipped > 0 && (
+                              <span className="text-red-500 ml-1">/ {log.skipped} ign.</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right text-sm">
+                            {log.totalAmount ? fmt(log.totalAmount) : "—"}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {log.importedByUser?.name || "—"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              {/* Replace button */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-blue-600"
+                                title="Remplacer"
+                                onClick={() => {
+                                  setReplaceLogId(log.id);
+                                  setTimeout(() => replaceFileRef.current?.click(), 100);
+                                }}
+                              >
+                                <RefreshCw className="h-3.5 w-3.5" />
+                              </Button>
+                              {/* Delete button */}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600"
+                                title="Supprimer"
+                                onClick={() => setDeleteConfirmId(log.id)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </Card>
+
+            {/* Hidden file input for replace */}
+            <Input
+              ref={replaceFileRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              onChange={() => {
+                const log = importLogs.find((l) => l.id === replaceLogId);
+                if (log) handleReplaceImport(log);
+              }}
+            />
+
+            {/* Delete confirmation dialog */}
+            <Dialog open={deleteConfirmId !== null} onOpenChange={() => setDeleteConfirmId(null)}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Supprimer cet import ?</DialogTitle>
+                </DialogHeader>
+                <p className="text-sm text-muted-foreground">
+                  Toutes les données importées (lignes de revenus) pour cette période seront supprimées.
+                  Les factures et payrolls existants devront être regénérés.
+                </p>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>
+                    Annuler
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={() => deleteConfirmId && handleDeleteImport(deleteConfirmId)}
+                    disabled={deleteLoading}
+                  >
+                    {deleteLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Supprimer
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
       )}

@@ -26,6 +26,8 @@ export async function POST(req: NextRequest) {
     const rows = sheetToJson(sheet);
     let imported = 0;
     let skipped = 0;
+    let totalAmount = 0;
+    const importedDates: Date[] = [];
     const errors: Array<{ row: number; message: string }> = [];
 
     for (let i = 0; i < rows.length; i++) {
@@ -72,6 +74,8 @@ export async function POST(req: NextRequest) {
           },
         });
         imported++;
+        importedDates.push(normalizedDate);
+        totalAmount += totalGross;
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error";
         console.error(`[IMPORT CHATTER] Row ${i + 1} skipped:`, msg);
@@ -80,6 +84,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const sortedDates = importedDates.sort((a, b) => a.getTime() - b.getTime());
+    const periodStart = sortedDates.length > 0 ? sortedDates[0] : undefined;
+    const periodEnd = sortedDates.length > 0 ? sortedDates[sortedDates.length - 1] : undefined;
+
     // Create ImportLog
     await prisma.importLog.create({
       data: {
@@ -87,9 +95,12 @@ export async function POST(req: NextRequest) {
         fileName: file.name,
         modelId,
         chatterId,
+        periodStart,
+        periodEnd,
         totalRows: rows.length,
         imported,
         skipped,
+        totalAmount: Math.round(totalAmount * 100) / 100,
         errors: errors.length > 0 ? errors : undefined,
         importedBy: session!.user.id,
       },
