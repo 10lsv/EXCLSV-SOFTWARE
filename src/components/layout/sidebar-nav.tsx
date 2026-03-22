@@ -20,6 +20,7 @@ import {
   Bell,
   User,
   Rocket,
+  Headset,
   type LucideIcon,
 } from "lucide-react";
 
@@ -50,6 +51,7 @@ const navByRole: Record<Role, NavCategory[]> = {
       label: "Gestion",
       items: [
         { label: "Modèles", href: "/admin/models", icon: Users },
+        { label: "Chatters", href: "/admin/chatters", icon: Headset },
         { label: "Onboarding", href: "/admin/onboarding", icon: Rocket },
       ],
     },
@@ -89,6 +91,7 @@ const navByRole: Record<Role, NavCategory[]> = {
       label: "Gestion",
       items: [
         { label: "Modèles", href: "/admin/models", icon: Users },
+        { label: "Chatters", href: "/admin/chatters", icon: Headset },
         { label: "Onboarding", href: "/admin/onboarding", icon: Rocket },
       ],
     },
