@@ -15,7 +15,7 @@ export async function GET(_req: NextRequest) {
     if (!mp) return jsonError("Profil modèle introuvable", 404);
 
     const invoices = await prisma.modelInvoice.findMany({
-      where: { modelId: mp.id, status: { in: ["SENT", "PAID"] } },
+      where: { modelId: mp.id, status: { in: ["SENT", "PAID", "OVERDUE"] } },
       orderBy: { periodStart: "desc" },
     });
 

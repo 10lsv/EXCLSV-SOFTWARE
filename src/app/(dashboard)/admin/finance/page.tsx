@@ -240,9 +240,9 @@ const STATUS_LABEL: Record<string, string> = {
 
 const INVOICE_TRANSITIONS: Record<string, string[]> = {
   DRAFT: ["SENT"],
-  SENT: ["PAID", "OVERDUE", "DRAFT"],
-  PAID: [],
-  OVERDUE: ["PAID", "DRAFT"],
+  SENT: ["PAID", "OVERDUE"],
+  PAID: ["SENT"],
+  OVERDUE: ["PAID", "SENT"],
 };
 
 const PAYROLL_TRANSITIONS: Record<string, string[]> = {
@@ -765,8 +765,8 @@ export default function AdminFinancePage() {
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
-    doc.text("Amount due to model:", 20, y);
-    doc.text(f(inv.amountDue), 170, y, { align: "right" });
+    doc.text("AMOUNT TO PAY:", 20, y);
+    doc.text(f(inv.agencyShare), 170, y, { align: "right" });
 
     // Footer
     doc.setFontSize(8);
@@ -906,8 +906,8 @@ export default function AdminFinancePage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {[
               { label: "CA Brut", value: kpiGross, trend: trendGross, icon: DollarSign, color: "gray" },
-              { label: "Part Agence", value: kpiAgency, trend: trendAgency, icon: Building2, color: "green" },
-              { label: "Part Modèles", value: kpiModels, trend: trendModels, icon: Users, color: "blue" },
+              { label: "À percevoir", value: kpiAgency, trend: trendAgency, icon: Building2, color: "green" },
+              { label: "Part modèles", value: kpiModels, trend: trendModels, icon: Users, color: "blue" },
               { label: "Masse Salariale", value: kpiPayroll, trend: null, icon: Wallet, color: "violet" },
             ].map((kpi, i) => (
               <Card key={i}>
@@ -985,8 +985,8 @@ export default function AdminFinancePage() {
                   <TableRow>
                     <TableHead>Modèle</TableHead>
                     <TableHead className="text-right">CA brut</TableHead>
-                    <TableHead className="text-right">Net modèle</TableHead>
-                    <TableHead className="text-right">Net agence</TableHead>
+                    <TableHead className="text-right">Part modèle</TableHead>
+                    <TableHead className="text-right">À percevoir</TableHead>
                     <TableHead>Statut</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1426,8 +1426,8 @@ export default function AdminFinancePage() {
                     <TableHead className="text-right">Com. OF</TableHead>
                     <TableHead className="text-right">Net OF</TableHead>
                     <TableHead className="text-right">% modèle</TableHead>
-                    <TableHead className="text-right">Net modèle</TableHead>
-                    <TableHead className="text-right">Net agence</TableHead>
+                    <TableHead className="text-right">Part modèle</TableHead>
+                    <TableHead className="text-right">À percevoir</TableHead>
                     <TableHead>Statut</TableHead>
                     <TableHead className="text-right">PDF</TableHead>
                   </TableRow>
