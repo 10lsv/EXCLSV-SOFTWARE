@@ -5,7 +5,15 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -14,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Users, Loader2, Eye, Wifi, Clock } from "lucide-react";
+import { Users, Loader2, Eye, Wifi, Clock, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
@@ -127,21 +135,32 @@ export default function AdminChattersPage() {
   const [kpis, setKpis] = useState<Kpis>({ totalChatters: 0, onlineCount: 0, totalWeekHours: 0 });
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function fetchChatters() {
-      try {
-        const res = await fetch("/api/chatters");
-        const json = await res.json();
-        if (json?.data) {
-          setChatters(json.data.chatters || []);
-          setKpis(json.data.kpis || { totalChatters: 0, onlineCount: 0, totalWeekHours: 0 });
-        }
-      } catch {
-        // silent
+  // Create dialog
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createEmail, setCreateEmail] = useState("");
+  const [createPassword, setCreatePassword] = useState("");
+  const [createHourlyRate, setCreateHourlyRate] = useState("0");
+  const [createCommission, setCreateCommission] = useState("0");
+  const [createLoading, setCreateLoading] = useState(false);
+
+  async function fetchChatters() {
+    try {
+      const res = await fetch("/api/chatters");
+      const json = await res.json();
+      if (json?.data) {
+        setChatters(json.data.chatters || []);
+        setKpis(json.data.kpis || { totalChatters: 0, onlineCount: 0, totalWeekHours: 0 });
       }
-      setLoading(false);
+    } catch {
+      // silent
     }
+    setLoading(false);
+  }
+
+  useEffect(() => {
     fetchChatters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function updateChatter(userId: string, field: string, value: number) {
@@ -169,6 +188,43 @@ export default function AdminChattersPage() {
     }
   }
 
+  async function handleCreateChatter() {
+    if (!createName.trim() || !createEmail.trim() || createPassword.length < 6) {
+      toast({ title: "Erreur", description: "Nom, email et mot de passe (min 6 car.) requis.", variant: "destructive" });
+      return;
+    }
+    setCreateLoading(true);
+    try {
+      const res = await fetch("/api/chatters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: createName.trim(),
+          email: createEmail.trim(),
+          password: createPassword,
+          hourlyRate: parseFloat(createHourlyRate) || 0,
+          commissionRate: parseFloat(createCommission) || 0,
+        }),
+      });
+      const json = await res.json();
+      if (json?.success || res.ok) {
+        toast({ title: "Chatter créé avec succès" });
+        setCreateOpen(false);
+        setCreateName("");
+        setCreateEmail("");
+        setCreatePassword("");
+        setCreateHourlyRate("0");
+        setCreateCommission("0");
+        fetchChatters();
+      } else {
+        toast({ title: "Erreur", description: json?.error || "Erreur lors de la création.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Erreur", description: "Erreur lors de la création.", variant: "destructive" });
+    }
+    setCreateLoading(false);
+  }
+
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
@@ -179,11 +235,9 @@ export default function AdminChattersPage() {
             {kpis.totalChatters} chatter{kpis.totalChatters > 1 ? "s" : ""}
           </p>
         </div>
-        <Button disabled className="opacity-50">
-          + Nouveau chatter
-          <span className="ml-2 text-[9px] bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded">
-            bientôt
-          </span>
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Nouveau chatter
         </Button>
       </div>
 
@@ -359,6 +413,78 @@ export default function AdminChattersPage() {
           </Table>
         </div>
       </Card>
+
+      {/* Create Chatter Dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Créer un chatter</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Nom *</Label>
+              <Input
+                placeholder="Ex: Alex Dupont"
+                value={createName}
+                onChange={(e) => setCreateName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email *</Label>
+              <Input
+                type="email"
+                placeholder="alex@example.com"
+                value={createEmail}
+                onChange={(e) => setCreateEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Mot de passe * (min 6 caractères)</Label>
+              <Input
+                type="password"
+                placeholder="••••••••"
+                value={createPassword}
+                onChange={(e) => setCreatePassword(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>Taux horaire ($/h)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={createHourlyRate}
+                  onChange={(e) => setCreateHourlyRate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Commission (%)</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max="100"
+                  value={createCommission}
+                  onChange={(e) => setCreateCommission(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+              Annuler
+            </Button>
+            <Button
+              onClick={handleCreateChatter}
+              disabled={createLoading || !createName.trim() || !createEmail.trim() || createPassword.length < 6}
+            >
+              {createLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Créer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

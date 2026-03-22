@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
-import { jsonSuccess, jsonError, requireRole } from "@/lib/api-utils";
+import { jsonSuccess, jsonError, requireRole, logAudit } from "@/lib/api-utils";
+import bcrypt from "bcryptjs";
 
 // GET /api/chatters — list chatters with assignments, hours, and shift status
 export async function GET(_req: NextRequest) {
@@ -101,6 +102,57 @@ export async function GET(_req: NextRequest) {
     });
   } catch (err: unknown) {
     console.error("[CHATTERS GET]", err);
+    return jsonError(err instanceof Error ? err.message : "Erreur interne", 500);
+  }
+}
+
+// POST /api/chatters — create a new chatter (User + ChatterProfile)
+export async function POST(req: NextRequest) {
+  const { error, session } = await requireRole(Role.OWNER, Role.ADMIN);
+  if (error) return error;
+
+  try {
+    const body = await req.json();
+    const { name, email, password, hourlyRate, commissionRate } = body;
+
+    if (!name || !name.trim()) return jsonError("Le nom est obligatoire");
+    if (!email || !email.trim()) return jsonError("L'email est obligatoire");
+    if (!password || password.length < 6) return jsonError("Le mot de passe doit contenir au moins 6 caractères");
+
+    // Check email uniqueness
+    const existing = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+    if (existing) return jsonError("Un utilisateur avec cet email existe déjà", 409);
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    const newUser = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          password: hashedPassword,
+          role: "CHATTER",
+        },
+      });
+
+      await tx.chatterProfile.create({
+        data: {
+          userId: user.id,
+          hourlyRate: parseFloat(String(hourlyRate)) || 0,
+          commissionRate: parseFloat(String(commissionRate)) || 0,
+        },
+      });
+
+      return user;
+    });
+
+    await logAudit(session!.user.id, "CREATE_CHATTER", "User", newUser.id, {
+      name: newUser.name, email: newUser.email,
+    });
+
+    return jsonSuccess({ id: newUser.id, name: newUser.name, email: newUser.email }, 201);
+  } catch (err: unknown) {
+    console.error("[CHATTERS POST]", err);
     return jsonError(err instanceof Error ? err.message : "Erreur interne", 500);
   }
 }
